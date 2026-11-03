@@ -1,0 +1,38 @@
+[project]
+name = "cheranyx-api"
+version = "0.1.0"
+description = "Chernyx AI Studio Phase 1 FastAPI backend"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+dependencies = [
+    "email-validator>=2.0.0",
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.30.1",
+    "python-dotenv>=1.0.1",
+    "pydantic>=2.8.2",
+    "sqlalchemy>=2.0.31",
+    "asyncpg>=0.29.0",
+    "alembic>=1.13.2",
+    "redis>=5.0.4",
+    "celery[redis]>=5.4.0",
+    "argon2-cffi>=23.1.0",
+    "python-jose[cryptography]>=3.3.0",
+    "psycopg2-binary>=2.9.9"
+]
+
+[build-system]
+requires = ["setuptools>=69.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app"]
+
+[tool.ruff]
+select = ["E", "F", "W", "C90"]
+ignore = []
+line-length = 120
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
