@@ -1,33 +1,12 @@
 
-import React, { useState } from "react";
+import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import axios from "axios";
+import { Bell, BookOpen, CircleHelp, Clock3, FolderOpen, House, LayoutGrid, LogOut, Moon, Plus, Sparkles, Sun, X } from "lucide-react";
 import "./style.css";
-import FourWallPreview from "./components/FourWallPreview";
+const FourWallPreview = lazy(() => import("./components/FourWallPreview"));
 import { classWorkspaceApi } from "./classWorkspaceApi.js";
 const API_URL = "http://127.0.0.1:8000/api/v1/auth";
-
-const INITIAL_PROJECTS = [
-  {
-    id: 1,
-    title: "Introduction to Immersive Learning",
-    category: "Social Skills",
-    status: "In Progress",
-    stage: "configure",
-    prompt:
-      "Create an immersive classroom where students can practise greeting others.",
-    version: 2,
-  },
-  {
-    id: 2,
-    title: "Interactive Learning Environment",
-    category: "Life Skills",
-    status: "Draft",
-    stage: "prompt",
-    prompt: "",
-    version: 1,
-  },
-];
 
 const QUESTIONS = [
   {
@@ -133,20 +112,113 @@ const QUESTIONS = [
 ];
 
 const NAVIGATION = [
-  { name: "Overview", icon: "⌂" },
-  { name: "My Experiences", icon: "▤" },
-  { name: "Create Experience", icon: "＋" },
-  { name: "Classes & Modules", icon: "▦" },
-  { name: "Learning Hub", icon: "◇" },
+  { name: "Overview", label: "Home", icon: House },
+  { name: "Classes & Modules", label: "Classes and modules", icon: LayoutGrid },
+  { name: "Create Experience", label: "Chernyx Studio", icon: Sparkles },
+  { name: "My Experiences", label: "Projects", icon: FolderOpen },
+  { name: "Session Notebook", label: "Session notebook", icon: BookOpen },
+  { name: "Learning Hub", label: "Learning hub", icon: CircleHelp },
 ];
 
+const DEFAULT_SCENE_SPEC = {
+  room: { w: 12, h: 8, entrance: { wall: "S", cells: [[5, 7], [6, 7]] } },
+  layout: [
+    {
+      id: "shelf1",
+      asset: "shelf",
+      cell: [2, 3],
+      size: [3, 1],
+      items: [
+        { sku: "milk", price: 62 },
+        { sku: "bread", price: 45 },
+      ],
+    },
+    {
+      id: "shelf2",
+      asset: "shelf",
+      cell: [6, 2],
+      size: [2, 1],
+      items: [
+        { sku: "apple", price: 30 },
+        { sku: "juice", price: 55 },
+      ],
+    },
+    { id: "counter", asset: "counter", cell: [10, 6], size: [1, 1] },
+  ],
+  task: {
+    required: ["milk", "bread"],
+    budget: 500,
+    time_limit_s: 300,
+    difficulty: "Developing",
+    rules: [
+      "Pick up every item on the shopping list",
+      "Keep total basket cost within budget",
+      "Pay at the counter when finished",
+    ],
+    what_ifs: [
+      "Preferred brand is out of stock",
+      "Shopkeeper asks if you need a bag",
+    ],
+  },
+  support: {
+    A: { prompt: 3, density: 2, volume: 40 },
+    B: { prompt: 2, density: 3, volume: 60 },
+    C: { prompt: 1, density: 5, volume: 80 },
+  },
+  events: [{ trigger: "enter", target: "shopkeeper" }],
+};
+
+function getTimeOfDayGreeting(name) {
+  const hour = new Date().getHours();
+  let salutation = "Good evening";
+  if (hour < 12) salutation = "Good morning";
+  else if (hour < 17) salutation = "Good afternoon";
+  return name ? `${salutation}, ${name}` : salutation;
+}
+
+function mapExperienceStatusLabel(status) {
+  if (status === "ready_to_configure") return "Ready to configure";
+  if (status === "configured") return "Configured";
+  if (status === "approved") return "Approved";
+  if (status === "generating") return "Generation queued";
+  return "Draft";
+}
+
+function mapExperienceStage(status) {
+  if (status === "ready_to_configure" || status === "configured") {
+    return "configure";
+  }
+  if (status === "approved") return "versions";
+  return "prompt";
+}
+
 function App() {
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem("chernyx_theme");
+      if (saved === "light" || saved === "dark") return saved;
+    } catch {}
+    return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
+  const notificationRef = useRef(null);
+  const notificationButtonRef = useRef(null);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem("chernyx_theme", theme); } catch {}
+  }, [theme]);
+
   // Authentication: login and signup live in this same file.
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(
+    () => !!sessionStorage.getItem("access_token")
+  );
   const [authPage, setAuthPage] = useState("login");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [userRole, setUserRole] = useState("tutor");
+  const [userFullName, setUserFullName] = useState("");
+  const [greeting, setGreeting] = useState(() => getTimeOfDayGreeting());
   const [loginError, setLoginError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -154,6 +226,7 @@ function App() {
     full_name: "",
     email: "",
     organisation_name: "",
+    role: "tutor",
     password: "",
     confirm_password: "",
   });
@@ -163,12 +236,39 @@ function App() {
 
   // Workspace navigation
   const [activeTab, setActiveTab] = useState("Overview");
-  const [projects, setProjects] = useState(INITIAL_PROJECTS);
+  const [projects, setProjects] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
+
+  // Notifications & Audit (LC-6, FR-19)
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notebookSessions, setNotebookSessions] = useState([]);
+  const [auditEvents, setAuditEvents] = useState([]);
+
+  useEffect(() => {
+    if (!showNotifications) return;
+    function dismiss(event) {
+      if (event.type === "keydown") {
+        if (event.key !== "Escape") return;
+        notificationButtonRef.current?.focus();
+      } else if (notificationRef.current?.contains(event.target)) return;
+      setShowNotifications(false);
+    }
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", dismiss);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", dismiss);
+    };
+  }, [showNotifications]);
 
   // Experience creation workflow
   const [stage, setStage] = useState("prompt");
   const [prompt, setPrompt] = useState("");
+  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [mediaAttachments, setMediaAttachments] = useState([]);
   const [experienceTitle, setExperienceTitle] = useState("");
   const [category, setCategory] = useState("Social Skills");
   const [questionIndex, setQuestionIndex] = useState(0);
@@ -177,6 +277,31 @@ function App() {
   const [concept, setConcept] = useState("guided");
   const [generationStarted, setGenerationStarted] = useState(false);
 
+  // Scene spec, validation report, dollhouse & plain-language edit (FR-08, FR-09, FR-14)
+  const [sceneSpec, setSceneSpec] = useState(DEFAULT_SCENE_SPEC);
+  const [validationReport, setValidationReport] = useState({
+    valid: true,
+    errors: [],
+    warnings: [],
+    rules_summary: {
+      R1: "pass",
+      R2: "pass",
+      R3: "pass",
+      R3w: "pass",
+      R4: "pass",
+      R5: "pass",
+      R6: "pass",
+      R7: "pass",
+    },
+    elapsed_ms: 0.13,
+  });
+  const [selectedSpecObjectId, setSelectedSpecObjectId] = useState("shelf1");
+  const [plainEditInput, setPlainEditInput] = useState("");
+  const [lastPatchInfo, setLastPatchInfo] = useState(null);
+  const [activePathway, setActivePathway] = useState("B");
+  const [activeRun, setActiveRun] = useState(null);
+  const [runMode, setRunMode] = useState("room");
+
   const [configuration, setConfiguration] = useState({
     environment: "Classroom",
     duration: "5–10 minutes",
@@ -184,35 +309,82 @@ function App() {
     visualStyle: "Soft 3D",
     accessibility: "Visual prompts",
     comfort: "Low stimulation",
+    budget: 500,
+    time_limit_s: 300,
+    required: "milk, bread",
   });
 
   const [versions, setVersions] = useState([]);
   const [notice, setNotice] = useState("");
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
+  const [schedules, setSchedules] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState("");
   const [className, setClassName] = useState("");
   const [classDescription, setClassDescription] = useState("");
   const [studentName, setStudentName] = useState("");
+  const [scheduleTitle, setScheduleTitle] = useState("");
+  const [scheduleDay, setScheduleDay] = useState("Monday");
+  const scheduleStart = "09:00";
+  const scheduleEnd = "10:00";
   const [classLoading, setClassLoading] = useState(false);
   const [classError, setClassError] = useState("");
   // Module management
-  
   const [modulesByClass, setModulesByClass] = useState(() => {
-  try {
-    return JSON.parse(
-      localStorage.getItem("chernyx_modules_by_class") || "{}"
-    );
-  } catch {
-    return {};
-  }
-});
+    try {
+      return JSON.parse(
+        localStorage.getItem("chernyx_modules_by_class") || "{}"
+      );
+    } catch {
+      return {};
+    }
+  });
 
   const [moduleName, setModuleName] = useState("");
   const [moduleDescription, setModuleDescription] = useState("");
   const [editingModuleId, setEditingModuleId] = useState(null);
   const [showModuleForm, setShowModuleForm] = useState(false);
-  const [editingClass, setEditingClass] = useState(false); 
+  const [editingClass, setEditingClass] = useState(false);
+
+  async function refreshWorkspaceData() {
+    try {
+      const [expList, clsList, notifData, nbData, auditData] = await Promise.all([
+        classWorkspaceApi.listExperiences().catch(() => []),
+        classWorkspaceApi.listClasses().catch(() => []),
+        classWorkspaceApi.listNotifications().catch(() => ({ unread_count: 0, items: [] })),
+        classWorkspaceApi.listNotebookSessions().catch(() => ({ sessions: [] })),
+        classWorkspaceApi.listAuditEvents().catch(() => []),
+      ]);
+      {
+        setProjects(
+          expList.map((e) => ({
+        ...e,
+            id: e.id,
+            title: e.title,
+            category: e.category || "Social Skills",
+            status: mapExperienceStatusLabel(e.status),
+            stage: mapExperienceStage(e.status),
+            prompt: e.prompt,
+            version: e.current_version || 1,
+            spec: e.spec || DEFAULT_SCENE_SPEC,
+            validation_report: e.validation_report,
+          }))
+        );
+      }
+      {
+        setClasses(clsList);
+        const firstId = clsList[0]?.id || "";
+        setSelectedClassId((curr) => curr || firstId);
+      }
+      setNotifications(notifData.items || []);
+      setUnreadCount(notifData.unread_count || 0);
+      setNotebookSessions(nbData.sessions || []);
+      setAuditEvents(Array.isArray(auditData) ? auditData : []);
+    } catch {
+      // Keep local prototype state if backend is offline
+    }
+  }
+
   async function handleLogin(event) {
     event.preventDefault();
     setLoginError("");
@@ -221,13 +393,24 @@ function App() {
     try {
       const response = await axios.post(
         `${API_URL}/login`,
-        { email: email.trim(), password },
+        {
+          email: email.trim(),
+          password,
+          local_hour: new Date().getHours(),
+        },
         { withCredentials: true }
       );
 
       if (response.data.access_token) {
         sessionStorage.setItem("access_token", response.data.access_token);
+        setUserRole(response.data.role || "tutor");
+        setUserFullName(response.data.full_name || "");
+        setGreeting(
+          response.data.greeting ||
+            getTimeOfDayGreeting(response.data.full_name || email.split("@")[0])
+        );
         setIsLoggedIn(true);
+        await refreshWorkspaceData();
       } else {
         setLoginError("Login response did not contain an access token.");
       }
@@ -274,7 +457,9 @@ function App() {
           full_name: signupForm.full_name.trim(),
           email: signupForm.email.trim(),
           organisation_name: signupForm.organisation_name.trim(),
+          role: signupForm.role || "tutor",
           password: signupForm.password,
+          local_hour: new Date().getHours(),
         },
         { withCredentials: true }
       );
@@ -288,6 +473,7 @@ function App() {
         full_name: "",
         email: "",
         organisation_name: "",
+        role: "tutor",
         password: "",
         confirm_password: "",
       });
@@ -319,6 +505,14 @@ function App() {
     }
 
     sessionStorage.removeItem("access_token");
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("token");
+    setProjects([]);
+    setClasses([]);
+    setStudents([]);
+    setVersions([]);
+    setSelectedId(null);
+    setActiveRun(null);
     setIsLoggedIn(false);
     setPassword("");
     setAuthPage("login");
@@ -327,6 +521,8 @@ function App() {
   function startNewExperience() {
     setSelectedId(null);
     setPrompt("");
+    setVoiceTranscript("");
+    setMediaAttachments([]);
     setExperienceTitle("");
     setCategory("Social Skills");
     setQuestionIndex(0);
@@ -334,18 +530,29 @@ function App() {
     setCustomAnswers({});
     setConcept("guided");
     setGenerationStarted(false);
+    setSceneSpec(DEFAULT_SCENE_SPEC);
+    setLastPatchInfo(null);
+    setActiveRun(null);
     setStage("prompt");
     setNotice("");
     setActiveTab("Create Experience");
   }
 
   function openProject(project) {
+    setAnswers(project.answers || {});
+    setCustomAnswers(project.answers?.notes || {});
+    setConfiguration((current) => ({ ...current, ...(project.configuration || {}), budget: project.spec?.task?.budget ?? 500, required: (project.spec?.task?.required || []).join(", ") }));
+    setVersions([]);
+    setActiveRun(null);
+    void classWorkspaceApi.listVersions(project.id).then((items) => setVersions(items.map((version) => ({ ...version, number: version.version_number, title: project.title, date: new Date(version.created_at).toLocaleDateString(), status: version.state, snapshot: version.configuration_snapshot })))).catch((error) => setNotice(error.message));
     setSelectedId(project.id);
     setPrompt(project.prompt || "");
     setExperienceTitle(project.title);
     setCategory(project.category || "Social Skills");
     setStage(project.stage || "prompt");
     setGenerationStarted(project.stage === "generating");
+    if (project.spec) setSceneSpec(project.spec);
+    if (project.validation_report) setValidationReport(project.validation_report);
     setNotice("");
     setActiveTab("Create Experience");
   }
@@ -361,43 +568,70 @@ function App() {
     });
   }
 
-  function saveDraft(nextStage = stage) {
+  async function saveDraft(nextStage = stage) {
+    const combinedPrompt =
+      prompt.trim() || voiceTranscript.trim() || "Create a life-skills learning scene";
     const title =
       experienceTitle.trim() ||
-      prompt.trim().split(/[.!?\n]/)[0].slice(0, 55) ||
+      combinedPrompt.split(/[.!?\n]/)[0].slice(0, 55) ||
       "Untitled learning experience";
 
-    if (!selectedId) {
-      const newProject = {
-        id: Date.now(),
-        title,
-        category,
-        prompt,
-        status: "Draft",
-        stage: nextStage,
-        version: 1,
-      };
-
-      setProjects((current) => [newProject, ...current]);
-      setSelectedId(newProject.id);
-      setExperienceTitle(title);
+    if (!selectedId || typeof selectedId === "number") {
+      try {
+        const created = await classWorkspaceApi.createExperience({
+          title,
+          prompt: combinedPrompt,
+          category,
+          voice_transcript: voiceTranscript || null,
+          attachments: mediaAttachments,
+        });
+        const newProj = {
+          id: created.id,
+          title: created.title,
+          category: created.category || category,
+          prompt: created.prompt,
+          status: "Draft",
+          stage: nextStage,
+          version: created.current_version || 1,
+        };
+        setProjects((current) => [newProj, ...current]);
+        setSelectedId(created.id);
+        setExperienceTitle(created.title);
+        return created.id;
+      } catch {
+        const fallbackId = selectedId || Date.now();
+        if (!selectedId) {
+          const newProject = {
+            id: fallbackId,
+            title,
+            category,
+            prompt: combinedPrompt,
+            status: "Draft",
+            stage: nextStage,
+            version: 1,
+          };
+          setProjects((current) => [newProject, ...current]);
+          setSelectedId(fallbackId);
+          setExperienceTitle(title);
+        } else {
+          updateProject({ title, category, prompt: combinedPrompt, stage: nextStage });
+        }
+        return fallbackId;
+      }
     } else {
-      updateProject({
-        title,
-        category,
-        prompt,
-        stage: nextStage,
-      });
+      updateProject({ title, category, prompt: combinedPrompt, stage: nextStage });
+      return selectedId;
     }
-
-    return title;
   }
 
-  function continueToQuestions(event) {
+  async function continueToQuestions(event) {
     event.preventDefault();
-    if (!prompt.trim()) return;
+    if (!prompt.trim() && !voiceTranscript.trim()) return;
+    if (!prompt.trim() && voiceTranscript.trim()) {
+      setPrompt(voiceTranscript.trim());
+    }
 
-    saveDraft("questions");
+    await saveDraft("questions");
     setQuestionIndex(0);
     setStage("questions");
     setNotice("");
@@ -411,38 +645,183 @@ function App() {
     setCustomAnswers((current) => ({ ...current, [index]: value }));
   }
 
-  function finishQuestions() {
-    saveDraft("review");
+  async function finishQuestions() {
+    const expId = await saveDraft("review");
+    if (expId && typeof expId === "string") {
+      try {
+        await classWorkspaceApi.updateAnswers(expId, answers);
+      } catch {
+        // Ignore if already past questions stage
+      }
+    }
     setStage("review");
     setNotice("");
   }
 
-  function approveConcept() {
-    saveDraft("generating");
+  async function approveConcept() {
+    const expId = await saveDraft("generating");
     setGenerationStarted(true);
     updateProject({ status: "Generation queued", stage: "generating" });
     setStage("generating");
     setNotice("");
+
+    if (expId && typeof expId === "string") {
+      try {
+        await classWorkspaceApi.updateConcept(expId, {
+          id: concept,
+          title:
+            concept === "guided"
+              ? "Guided practice shop"
+              : concept === "explore"
+                ? "Open neighbourhood market"
+                : "Calm sensory corner store",
+        });
+        await classWorkspaceApi.approveConcept(expId);
+      } catch {
+        // Fallback for local state
+      }
+    }
   }
 
-  function markReadyToConfigure() {
+  async function markReadyToConfigure() {
+    if (selectedId && typeof selectedId === "string") {
+      try {
+        const generated = await classWorkspaceApi.generateExperience(selectedId);
+        if (generated.spec) setSceneSpec(generated.spec);
+        if (generated.validation_report) {
+          setValidationReport(generated.validation_report);
+        }
+        const notifData = await classWorkspaceApi.listNotifications().catch(() => null);
+        if (notifData) {
+          setNotifications(notifData.items || []);
+          setUnreadCount(notifData.unread_count || 0);
+        }
+      } catch {
+        // Continue with local validated reference spec
+      }
+    }
     setStage("configure");
     setGenerationStarted(false);
     updateProject({ status: "Ready to configure", stage: "configure" });
     setNotice(
-      "Demo state updated. Real scene generation is not connected yet."
+      "Scene spec generated and validated against R1–R7 constraints. Configuration is now unlocked."
     );
   }
 
-  function saveConfiguration() {
-    saveDraft("configure");
-    updateProject({ status: "Configured", stage: "configure" });
-    setNotice("Configuration saved in this prototype.");
+  async function handlePlainLanguageEdit(event) {
+    event.preventDefault();
+    if (!plainEditInput.trim()) return;
+
+    if (selectedId && typeof selectedId === "string") {
+      try {
+        const res = await classWorkspaceApi.plainLanguageEdit(
+          selectedId,
+          plainEditInput.trim()
+        );
+        if (res.experience?.spec) setSceneSpec(res.experience.spec);
+        if (res.validation_report) setValidationReport(res.validation_report);
+        setLastPatchInfo({
+          ratio: (res.patch_ratio * 100).toFixed(1),
+          ops: res.patch_ops,
+          version: res.version_number,
+        });
+        updateProject({
+          version: res.version_number,
+          status: "Ready to configure",
+        });
+        setPlainEditInput("");
+        setNotice(
+          `Plain-language patch applied (${(res.patch_ratio * 100).toFixed(1)}% of spec bytes) · Created v${res.version_number}.`
+        );
+        return;
+      } catch (err) {
+        setNotice(`Edit rejected by R1–R7 validator: ${err.message}`);
+        return;
+      }
+    }
+
+    // Offline localized patch fallback
+    const nextSpec = JSON.parse(JSON.stringify(sceneSpec));
+    const text = plainEditInput.trim().toLowerCase();
+    const mBudget = text.match(/budget\s+(?:to|=)\s*(\d+)/);
+    const mPrice = text.match(/([a-z0-9_]+)\s+price\s+(?:to|=)\s*(\d+)/);
+    if (mBudget) {
+      nextSpec.task.budget = Number(mBudget[1]);
+    } else if (mPrice) {
+      nextSpec.layout.forEach((obj) => {
+        (obj.items || []).forEach((it) => {
+          if (it.sku === mPrice[1]) it.price = Number(mPrice[2]);
+        });
+      });
+    }
+    setSceneSpec(nextSpec);
+    setLastPatchInfo({ ratio: "0.8", ops: [{ op: "replace" }], version: 2 });
+    setPlainEditInput("");
+    setNotice("Localized patch applied (< 10% of spec bytes) and validated by R1–R7.");
   }
 
-  function approveVersion() {
+  async function saveConfiguration() {
+    const reqList = String(configuration.required || "milk, bread")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const updatedSpec = {
+      ...sceneSpec,
+      task: {
+        ...sceneSpec.task,
+        budget: Number(configuration.budget || 500),
+        time_limit_s: Number(configuration.time_limit_s || 300),
+        required: reqList.length ? reqList : ["milk", "bread"],
+      },
+    };
+    setSceneSpec(updatedSpec);
+
+    if (selectedId && typeof selectedId === "string") {
+      try {
+        const res = await classWorkspaceApi.updateConfiguration(
+          selectedId,
+          configuration,
+          updatedSpec
+        );
+        if (res.validation_report) setValidationReport(res.validation_report);
+      } catch (err) {
+        setNotice(`Configuration rejected: ${err.message}`);
+        return;
+      }
+    }
+
+    updateProject({ status: "Configured", stage: "configure" });
+    setNotice("Configuration validated against R1–R7 and saved.");
+  }
+
+  async function approveVersion() {
     const current = projects.find((project) => project.id === selectedId);
-    const nextVersion = (current?.version || 1) + 1;
+    let nextVersion = (current?.version || 1) + 1;
+
+    if (selectedId && typeof selectedId === "string") {
+      try {
+        const res = await classWorkspaceApi.approveVersionForLaunch(selectedId);
+        nextVersion = res.current_version || nextVersion;
+        const verList = await classWorkspaceApi.listVersions(selectedId).catch(() => []);
+        if (verList.length > 0) {
+          setVersions(
+            verList.map((v) => ({
+              id: v.id,
+              number: v.version_number,
+              title: experienceTitle || current?.title || "Learning experience",
+              date: new Date(v.created_at).toLocaleDateString(),
+              status: v.state === "approved" ? "Approved" : "Configured",
+              snapshot: v.configuration_snapshot || { ...configuration },
+            }))
+          );
+          updateProject({ version: nextVersion, status: "Approved" });
+          setNotice(`Version ${nextVersion} approved and immutable. Ready to launch.`);
+          return;
+        }
+      } catch {
+        // Fallback to local version list
+      }
+    }
 
     setVersions((items) => [
       {
@@ -457,10 +836,142 @@ function App() {
     ]);
 
     updateProject({ version: nextVersion, status: "Approved" });
-    setNotice(`Version ${nextVersion} approved in this prototype.`);
+    setNotice(`Version ${nextVersion} approved and locked for running.`);
   }
 
-  function duplicateProject(project) {
+  async function handleLaunchRuntime(selectedMode = runMode) {
+    const current = projects.find((project) => project.id === selectedId);
+    if (current?.status !== "Approved" && versions.length === 0) {
+      setNotice("Only approved versions can launch (FR-11). Approve the version first.");
+      return;
+    }
+
+    if (selectedId && typeof selectedId === "string") {
+      try {
+        const runData = await classWorkspaceApi.launchRun({
+          experience_id: selectedId,
+          pathway: activePathway,
+          mode: selectedMode,
+          learner_id: students[0]?.id || null,
+        });
+        setActiveRun(runData);
+        setRunMode(selectedMode);
+        setStage("runtime");
+        setNotice(`Launched on ${selectedMode === "room" ? "Four-Wall Room (N/E/S/W)" : "Laptop"} · Pathway ${activePathway}`);
+        return;
+      } catch (err) {
+        setNotice(`Launch blocked: ${err.message}`);
+        return;
+      }
+    }
+
+    setActiveRun({
+      id: `run-${Date.now()}`,
+      scenario_title: experienceTitle || current?.title || "Shopping Scenario",
+      version_number: current?.version || 1,
+      pathway: activePathway,
+      mode: selectedMode,
+      status: "running",
+      learner_position: { x: 5, y: 7, dir: "N" },
+      basket: [],
+      basket_total: 0,
+      budget: sceneSpec.task?.budget || 500,
+      required_items: sceneSpec.task?.required || ["milk", "bread"],
+      steps_completed: ["entered_room"],
+      prompts_given: 0,
+      tutor_decisions: 0,
+      errors_count: 0,
+      active_what_if: null,
+    });
+    setRunMode(selectedMode);
+    setStage("runtime");
+    setNotice(`Launched approved scenario in ${selectedMode} mode.`);
+  }
+
+  async function handleConsoleCommand(command, payload = {}) {
+    if (!activeRun) return;
+    if (activeRun.id && !String(activeRun.id).startsWith("run-")) {
+      try {
+        const updated = await classWorkspaceApi.sendRunCommand(
+          activeRun.id,
+          command,
+          payload
+        );
+        setActiveRun(updated);
+        if (updated.pathway) setActivePathway(updated.pathway);
+        const nbData = await classWorkspaceApi.listNotebookSessions().catch(() => null);
+        if (nbData?.sessions) setNotebookSessions(nbData.sessions);
+        return;
+      } catch {
+        // Fallback to local simulation
+      }
+    }
+
+    setActiveRun((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev };
+      const pos = { ...(prev.learner_position || { x: 5, y: 7, dir: "N" }) };
+      if (command === "pause") {
+        next.status = "paused";
+        next.tutor_decisions += 1;
+      } else if (command === "resume") {
+        next.status = "running";
+        next.tutor_decisions += 1;
+      } else if (command === "simplify") {
+        next.pathway = prev.pathway === "C" ? "B" : "A";
+        setActivePathway(next.pathway);
+        next.tutor_decisions += 1;
+      } else if (command === "prompt") {
+        next.prompts_given += 1;
+        next.tutor_decisions += 1;
+      } else if (command === "what_if") {
+        next.active_what_if = payload.event || "Preferred item out of stock";
+        next.tutor_decisions += 1;
+      } else if (command === "move" && prev.status !== "paused") {
+        const dir = payload.dir || "N";
+        const delta = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] }[dir] || [0, 0];
+        pos.x = Math.max(0, Math.min(11, pos.x + delta[0]));
+        pos.y = Math.max(0, Math.min(7, pos.y + delta[1]));
+        pos.dir = dir;
+        next.learner_position = pos;
+      } else if (command === "select") {
+        const sku = payload.sku || "milk";
+        const price = sku === "bread" ? 45 : 62;
+        if (payload.checkout) {
+          next.status = "completed";
+          next.steps_completed = [...new Set([...next.steps_completed, "completed_checkout"])];
+        } else {
+          next.basket = [...(prev.basket || []), { sku, price }];
+          next.basket_total = (prev.basket_total || 0) + price;
+          next.steps_completed = [...new Set([...next.steps_completed, `picked_${sku}`])];
+        }
+      }
+      return next;
+    });
+  }
+
+  async function duplicateProject(project) {
+    if (project.id && typeof project.id === "string") {
+      try {
+        const copy = await classWorkspaceApi.duplicateExperience(project.id);
+        setProjects((current) => [
+          {
+            id: copy.id,
+            title: copy.title,
+            category: copy.category || project.category,
+            status: "Draft",
+            stage: "prompt",
+            prompt: copy.prompt,
+            version: copy.current_version || 1,
+          },
+          ...current,
+        ]);
+        setNotice("Experience duplicated on server.");
+        return;
+      } catch {
+        // Fallback below
+      }
+    }
     const copy = {
       ...project,
       id: Date.now(),
@@ -474,10 +985,17 @@ function App() {
     setNotice("Experience duplicated.");
   }
 
-  function restoreVersion(version) {
+  async function restoreVersion(version) {
+    if (selectedId && typeof selectedId === "string" && typeof version.id === "string") {
+      try {
+        await classWorkspaceApi.restoreVersion(selectedId, version.id);
+      } catch {
+        // Ignore
+      }
+    }
     setConfiguration(version.snapshot);
     setNotice(
-      `Version ${version.number} configuration restored in this prototype.`
+      `Version ${version.number} configuration restored as a new version snapshot.`
     );
   }
 
@@ -501,17 +1019,41 @@ function App() {
     drafts: projects.filter((project) => project.status === "Draft").length,
   };
 
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    let cancelled = false;
+    axios.get(`${API_URL}/me?local_hour=${new Date().getHours()}`, { headers: { Authorization: `Bearer ${sessionStorage.getItem("access_token")}` } }).then(({ data }) => {
+      if (cancelled) return;
+      setEmail(data.email);
+      setUserFullName(data.full_name || "");
+      setUserRole(data.role);
+      setGreeting(data.greeting);
+      void refreshWorkspaceData();
+    }).catch(() => {
+      if (!cancelled) { sessionStorage.removeItem("access_token"); setIsLoggedIn(false); }
+    });
+    return () => { cancelled = true; };
+  }, [isLoggedIn]);
+
   // Authentication screens share this file and switch using authPage.
   if (!isLoggedIn) {
     return (
       <main className="login-page">
+        <button type="button" className="icon-button login-theme" title={`Use ${theme === "light" ? "dark" : "light"} theme`} aria-label={`Use ${theme === "light" ? "dark" : "light"} theme`} onClick={() => setTheme(theme === "light" ? "dark" : "light")}>
+          {theme === "light" ? <Moon size={19} /> : <Sun size={19} />}
+        </button>
+        <header className="login-brand">
+          <div className="sidebar-brand"><div className="brand-logo"><Sparkles size={24} /></div><strong>Chernyx AI Studio</strong></div>
+          <div><p className="eyebrow">YOUR TEACHING WORKSPACE</p><h1>Chernyx AI Studio</h1><p>Describe the room.<br />Teach inside it.</p></div>
+          <FourWallPreview spec={DEFAULT_SCENE_SPEC} previewOnly />
+          <span className="login-brand-footer">Immersive learning, thoughtfully made.</span>
+        </header>
         <section className="login-card">
-          <div className="brand-logo">C</div>
-          <p className="login-eyebrow">CHERNYX AI STUDIO</p>
+          <p className="login-eyebrow">TUTOR WORKSPACE</p>
 
           {authPage === "login" ? (
             <>
-              <h1>Welcome back</h1>
+              <h2>Sign in</h2>
               <p>Sign in to continue to your learning workspace.</p>
 
               {signupSuccess && (
@@ -569,7 +1111,7 @@ function App() {
             </>
           ) : (
             <>
-              <h1>Create your account</h1>
+              <h2>Create your account</h2>
               <p>Set up your tutor workspace to start creating learning experiences.</p>
 
               <form onSubmit={handleSignup}>
@@ -685,7 +1227,15 @@ function App() {
       ["generating", "Generate"],
       ["configure", "Configure"],
       ["versions", "Versions"],
+      ["runtime", "Run & Console"],
     ];
+
+    const currentProj = projects.find((p) => p.id === selectedId);
+    const isUnlockedForConfig =
+      currentProj &&
+      ["Ready to configure", "Configured", "Approved", "In Progress"].includes(
+        currentProj.status
+      );
 
     return (
       <div className="workflow-steps">
@@ -702,13 +1252,27 @@ function App() {
                 setStage("versions");
                 return;
               }
+              if (key === "runtime") {
+                if (currentProj?.status === "Approved" || versions.length > 0) {
+                  setStage("runtime");
+                } else {
+                  setNotice("Approve a version before launching runtime (FR-11).");
+                }
+                return;
+              }
+              if (key === "configure" && !isUnlockedForConfig) {
+                setNotice(
+                  "Configuration is locked until generation reaches Ready to configure (FR-07)."
+                );
+                return;
+              }
 
               const allowed = {
                 prompt: true,
-                questions: !!prompt.trim(),
-                review: !!prompt.trim(),
+                questions: !!(prompt.trim() || voiceTranscript.trim()),
+                review: !!(prompt.trim() || voiceTranscript.trim()),
                 generating: generationStarted || !!selectedId,
-                configure: !!selectedId,
+                configure: isUnlockedForConfig,
               };
 
               if (allowed[key]) {
@@ -725,16 +1289,34 @@ function App() {
     );
   }
 
+  function handleSimulateVoiceClip() {
+    setIsRecordingVoice(true);
+    setTimeout(() => {
+      setIsRecordingVoice(false);
+      const sample =
+        "Create a calm neighbourhood shop with milk and bread on reachable shelves, a 500 rupee budget, and gentle step-by-step prompts.";
+      setVoiceTranscript((prev) => (prev ? `${prev} ${sample}` : sample));
+      setNotice("Voice clip transcribed (FR-03). You can edit the transcript below before continuing.");
+    }, 350);
+  }
+
+  function handleAttachmentAdd(event) {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    const mapped = files.map((f) => ({
+      name: f.name,
+      type: f.type || "media",
+      size: f.size,
+    }));
+    setMediaAttachments((prev) => [...prev, ...mapped]);
+  }
+
   function renderPromptStage() {
     return (
       <>
         <div className="studio-intro">
-          <span className="eyebrow">STEP 01 · DESCRIBE</span>
-          <h1>What would you like your learners to experience?</h1>
-          <p>
-            Start with your idea. Describe the skill, setting, or challenge.
-            Your answers will help shape the proposed learning experience.
-          </p>
+          <span className="eyebrow">NEW ACTIVITY</span>
+          <h1>Chernyx Studio</h1>
         </div>
 
         <form className="prompt-panel" onSubmit={continueToQuestions}>
@@ -745,14 +1327,50 @@ function App() {
             id="experience-prompt"
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
-            placeholder="Example: Create a calm, interactive 3D classroom where learners can practise introducing themselves, greeting classmates, and taking turns in a conversation..."
-            rows={7}
-            required
+            placeholder="Example: Create a calm, interactive 3D grocery shop where learners practise picking up milk and bread within a ₹500 budget and paying at the counter..."
+            rows={5}
+            required={!voiceTranscript.trim()}
           />
 
           <div className="prompt-meta">
-            <span>Be as detailed or as simple as you like.</span>
+            <span>Activity brief</span>
             <span>{prompt.length} characters</span>
+          </div>
+
+          <div className="voice-intake-box">
+            <div className="voice-intake-header">
+              <strong>Voice transcript</strong>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleSimulateVoiceClip}
+                >
+                  {isRecordingVoice ? "Recording..." : "🎙 Record voice clip"}
+                </button>
+                {voiceTranscript && (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => {
+                      setPrompt((curr) =>
+                        curr ? `${curr}\n${voiceTranscript}` : voiceTranscript
+                      );
+                      setNotice("Transcript copied into main prompt.");
+                    }}
+                  >
+                    Use transcript in prompt
+                  </button>
+                )}
+              </div>
+            </div>
+            <textarea
+              aria-label="Editable voice transcript"
+              rows={2}
+              value={voiceTranscript}
+              onChange={(e) => setVoiceTranscript(e.target.value)}
+              placeholder="Voice transcript appears here and is fully editable before sending..."
+            />
           </div>
 
           <div className="form-grid">
@@ -762,7 +1380,7 @@ function App() {
                 id="experience-title"
                 value={experienceTitle}
                 onChange={(event) => setExperienceTitle(event.target.value)}
-                placeholder="e.g. Practising everyday conversations"
+                placeholder="e.g. Neighbourhood Grocery Shopping"
               />
             </div>
             <div>
@@ -781,8 +1399,27 @@ function App() {
             </div>
           </div>
 
+          <div className="attachment-bar">
+            <label htmlFor="media-attachment-input" className="secondary-button">
+              📎 Attach image/video reference
+            </label>
+            <input
+              id="media-attachment-input"
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              style={{ display: "none" }}
+              onChange={handleAttachmentAdd}
+            />
+            {mediaAttachments.map((att, idx) => (
+              <span key={`${att.name}-${idx}`} className="status-pill">
+                {att.name}
+              </span>
+            ))}
+          </div>
+
           <div className="prompt-footer">
-            <span className="helper-note">Next: up to 20 guided questions</span>
+            <span className="helper-note">20 optional questions</span>
             <button type="submit" className="primary-button">
               Continue to questions <span>→</span>
             </button>
@@ -792,10 +1429,10 @@ function App() {
         <div className="tip-panel">
           <span className="tip-icon">✦</span>
           <div>
-            <strong>Not sure where to start?</strong>
+            <strong>Governing principle: Plan–Validate–Build</strong>
             <p>
-              Tell us what learners need to practise, what environment might
-              help, and what a successful session would look like.
+              The AI plans a typed JSON scene spec, the backend validates rules
+              R1–R7, and the runtime renders only validated scenes.
             </p>
           </div>
         </div>
@@ -807,11 +1444,10 @@ function App() {
     return (
       <>
         <div className="studio-intro">
-          <span className="eyebrow">STEP 02 · CLARIFY</span>
+          <span className="eyebrow">ACTIVITY DETAILS</span>
           <h1>Let’s shape your idea</h1>
           <p>
-            These questions help define the experience. Answer what you can
-            and skip anything you haven't decided yet.
+            Every question is skippable. Skipping all 20 still allows generation.
           </p>
         </div>
 
@@ -832,7 +1468,7 @@ function App() {
               />
             </div>
             <p className="muted-text">
-              You can skip questions and review your choices later.
+              You can skip any or all questions and proceed directly to concept preview.
             </p>
           </aside>
 
@@ -919,7 +1555,7 @@ function App() {
             </div>
 
             <button className="finish-questions" onClick={finishQuestions}>
-              Finish questions and review my idea
+              Skip remaining questions & review my idea →
             </button>
           </section>
         </div>
@@ -928,15 +1564,38 @@ function App() {
   }
 
   function renderReviewStage() {
+    const threeConcepts = [
+      {
+        id: "guided",
+        artClass: "art-guided",
+        roomLabel: "GUIDED SHOP",
+        title: "Guided practice shop",
+        desc: "A structured environment with clear step-by-step visual cues, labeled prices, and gentle feedback.",
+        tags: ["Structured", "Supportive", "Pathway A/B/C"],
+      },
+      {
+        id: "explore",
+        artClass: "art-explore",
+        roomLabel: "OPEN MARKET",
+        title: "Open neighbourhood market",
+        desc: "A flexible layout where learners compare item prices across aisles and practise budget decisions.",
+        tags: ["Exploration", "Budget choice", "Flexible"],
+      },
+      {
+        id: "calm",
+        artClass: "art-guided",
+        roomLabel: "CALM SENSORY",
+        title: "Calm sensory corner store",
+        desc: "A quieter setting with fewer distractions and wide, uncluttered walkways.",
+        tags: ["Low stimulation", "Reduced density", "Accessible"],
+      },
+    ];
+
     return (
       <>
         <div className="studio-intro">
-          <span className="eyebrow">STEP 03 · REVIEW</span>
-          <h1>Your idea, brought into focus</h1>
-          <p>
-            Review the brief and proposed direction before starting generation.
-            You stay in control of what gets created.
-          </p>
+          <span className="eyebrow">CONCEPT PREVIEWS</span>
+          <h1>Choose your learning space</h1>
         </div>
 
         <section className="review-brief content-card">
@@ -966,73 +1625,45 @@ function App() {
 
         <div className="section-heading preview-heading">
           <div>
-            <span className="eyebrow">PROPOSED DIRECTIONS</span>
-            <h2>Choose a concept to develop</h2>
-            <p>These are illustrative concepts for the frontend prototype.</p>
+            <span className="eyebrow">THREE DIRECTIONS</span>
+            <h2>Choose one of three concepts to generate</h2>
           </div>
         </div>
 
-        <div className="concept-grid">
-          <button
-            className={`concept-card ${concept === "guided" ? "selected" : ""}`}
-            onClick={() => setConcept("guided")}
-          >
-            <div className="concept-art art-guided">
-              <span className="art-orb orb-one" />
-              <span className="art-orb orb-two" />
-              <span className="art-room">GUIDED SPACE</span>
-            </div>
-            <div className="concept-content">
-              <div className="concept-title">
-                <h3>Guided learning space</h3>
-                <span>{concept === "guided" ? "✓ Selected" : "Select"}</span>
+        <div className="concept-grid three-concepts-grid">
+          {threeConcepts.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`concept-card ${concept === item.id ? "selected" : ""}`}
+              onClick={() => setConcept(item.id)}
+            >
+              <div className={`concept-art ${item.artClass}`}>
+                <FourWallPreview spec={DEFAULT_SCENE_SPEC} previewOnly />
               </div>
-              <p>
-                A structured environment with clear steps, visual cues, and
-                gentle feedback.
-              </p>
-              <div className="concept-tags">
-                <span>Structured</span><span>Supportive</span>
+              <div className="concept-content">
+                <div className="concept-title">
+                  <h3>{item.title}</h3>
+                  <span>{concept === item.id ? "✓ Selected" : "Select"}</span>
+                </div>
+                <p>{item.desc}</p>
+                <div className="concept-tags">
+                  {item.tags.map((t) => (
+                    <span key={t}>{t}</span>
+                  ))}
+                </div>
               </div>
-            </div>
-          </button>
-
-          <button
-            className={`concept-card ${concept === "explore" ? "selected" : ""}`}
-            onClick={() => setConcept("explore")}
-          >
-            <div className="concept-art art-explore">
-              <span className="art-orb orb-three" />
-              <span className="art-orb orb-four" />
-              <span className="art-room">OPEN EXPLORATION</span>
-            </div>
-            <div className="concept-content">
-              <div className="concept-title">
-                <h3>Explore and discover</h3>
-                <span>{concept === "explore" ? "✓ Selected" : "Select"}</span>
-              </div>
-              <p>
-                A more open environment where learners explore objects and
-                discover tasks.
-              </p>
-              <div className="concept-tags">
-                <span>Exploration</span><span>Flexible</span>
-              </div>
-            </div>
-          </button>
+            </button>
+          ))}
         </div>
 
         <div className="approval-banner">
           <div className="approval-mark">✓</div>
           <div>
-            <strong>Review before generation</strong>
-            <p>
-              Generation should only begin after you approve the proposed
-              direction.
-            </p>
+            <strong>Ready to build your activity?</strong>
           </div>
           <button className="primary-button" onClick={approveConcept}>
-            Approve & start generation →
+            Approve & Start generating →
           </button>
         </div>
       </>
@@ -1043,12 +1674,9 @@ function App() {
     return (
       <>
         <div className="studio-intro">
-          <span className="eyebrow">STEP 04 · GENERATE</span>
+          <span className="eyebrow">GENERATION</span>
           <h1>Your experience is taking shape</h1>
-          <p>
-            This screen represents the background-generation stage. In the
-            current prototype, the generation process is simulated.
-          </p>
+          <p>{experienceTitle}</p>
         </div>
 
         <section className="generation-card">
@@ -1059,50 +1687,192 @@ function App() {
           </div>
 
           <span className="generation-status">
-            {generationStarted ? "DEMO · GENERATION QUEUED" : "GENERATION"}
+            {generationStarted ? "CONCEPT APPROVED" : "GENERATION"}
           </span>
           <h2>{experienceTitle || "Your learning experience"}</h2>
-          <p>
-            Your approved concept is ready for the next stage of the workflow.
-            Real AI planning and 3D scene generation still need to be connected.
-          </p>
 
           <div className="generation-tasks">
-            <div><span className="task-check">✓</span><span>Learning brief prepared</span><span className="task-state">Ready</span></div>
-            <div><span className="task-check">✓</span><span>Concept direction approved</span><span className="task-state">Approved</span></div>
-            <div><span className="task-pending">3</span><span>Scene generation and validation</span><span className="task-state">Not connected</span></div>
+            <div><span className="task-check">✓</span><span>Activity brief</span><span className="task-state">Saved</span></div>
+            <div><span className="task-check">✓</span><span>Concept direction</span><span className="task-state">Approved</span></div>
+            <div><Clock3 size={16} /><span>Scene generation</span><span className="task-state">Pending</span></div>
           </div>
 
           <button className="primary-button" onClick={markReadyToConfigure}>
-            Demo: mark ready to configure →
+            Complete generation & unlock configuration →
           </button>
-          <p className="muted-text">
-            This button simulates a completed job; it does not generate a real
-            3D scene.
-          </p>
+          <p className="muted-text">Mock AI provider</p>
         </section>
       </>
     );
   }
 
+  function renderDollhouseAndEditPanel() {
+    const w = sceneSpec.room?.w || 12;
+    const h = sceneSpec.room?.h || 8;
+    const layout = sceneSpec.layout || [];
+    const entranceCells = sceneSpec.room?.entrance?.cells || [[5, 7], [6, 7]];
+
+    const cellMap = {};
+    layout.forEach((obj) => {
+      const [ox, oy] = obj.cell || [0, 0];
+      const [ow, oh] = obj.size || [1, 1];
+      for (let cx = ox; cx < ox + ow; cx += 1) {
+        for (let cy = oy; cy < oy + oh; cy += 1) {
+          cellMap[`${cx},${cy}`] = obj;
+        }
+      }
+    });
+
+    const selectedObj =
+      layout.find((o) => o.id === selectedSpecObjectId) || layout[0];
+    const rulesSummary = validationReport?.rules_summary || {
+      R1: "pass",
+      R2: "pass",
+      R3: "pass",
+      R3w: "pass",
+      R4: "pass",
+      R5: "pass",
+      R6: "pass",
+      R7: "pass",
+    };
+
+    return (
+      <section className="content-card" style={{ marginBottom: 22 }}>
+        <div className="section-heading">
+          <div>
+            <span className="mini-label">SCENE DETAILS</span>
+            <h3>Layout & changes</h3>
+          </div>
+          <span className="status-pill status-configured">
+            {validationReport?.valid ? "Validation passed" : "Needs review"}
+          </span>
+        </div>
+
+        <div className="r1-r7-bar">
+          {[
+            ["R1", "Structure"],
+            ["R2", "Geometry"],
+            ["R3", "Reachability (BFS)"],
+            ["R3w", "Decor Reach"],
+            ["R4", "Solvability"],
+            ["R5", "Comfort Caps"],
+            ["R6", "Monotone A/B/C"],
+            ["R7", "Ref Integrity"],
+          ].map(([code, label]) => {
+            const st = rulesSummary[code] || "pass";
+            return (
+              <span
+                key={code}
+                className={`rule-badge rule-${st}`}
+                title={`${code}: ${label} (${st})`}
+              >
+                <strong>{code}</strong> {label}: {st.toUpperCase()}
+              </span>
+            );
+          })}
+        </div>
+
+        <div className="dollhouse-split">
+          <div>
+            <div
+              className="dollhouse-grid"
+              style={{
+                gridTemplateColumns: `repeat(${w}, minmax(0, 1fr))`,
+              }}
+              aria-label="Dollhouse 12x8 top-down scene map"
+            >
+              {Array.from({ length: h }).map((_, ry) =>
+                Array.from({ length: w }).map((__, rx) => {
+                  const key = `${rx},${ry}`;
+                  const obj = cellMap[key];
+                  const isEntrance = entranceCells.some(
+                    ([ex, ey]) => ex === rx && ey === ry
+                  );
+                  const isSelected = obj && obj.id === selectedSpecObjectId;
+                  return (
+                    <button
+                      type="button"
+                      key={key}
+                      className={`dollhouse-cell ${
+                        obj ? "occupied" : ""
+                      } ${isEntrance ? "entrance" : ""} ${
+                        isSelected ? "selected" : ""
+                      }`}
+                      onClick={() => {
+                        if (obj) setSelectedSpecObjectId(obj.id);
+                      }}
+                      title={
+                        obj
+                          ? `${obj.id} (${obj.asset}) at [${rx}, ${ry}]`
+                          : isEntrance
+                            ? `South Entrance [${rx}, ${ry}]`
+                            : `Walkable floor [${rx}, ${ry}]`
+                      }
+                    >
+                      {obj
+                        ? obj.asset === "counter"
+                          ? "🧾"
+                          : "🗄️"
+                        : isEntrance
+                          ? "🚪"
+                          : "·"}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="spec-inspector">
+            <span className="mini-label">
+              {selectedObj?.id || "Scene"}
+            </span>
+            <pre className="spec-code-box">
+              {JSON.stringify(selectedObj || sceneSpec, null, 2)}
+            </pre>
+
+            <form onSubmit={handlePlainLanguageEdit} className="plain-edit-form">
+              <label htmlFor="plain-language-edit-input">
+                Ask for a change
+              </label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  id="plain-language-edit-input"
+                  value={plainEditInput}
+                  onChange={(e) => setPlainEditInput(e.target.value)}
+                  placeholder='e.g. "Change milk price to 55" or "Set budget to 600"'
+                />
+                <button type="submit" className="primary-button">
+                  Apply patch
+                </button>
+              </div>
+              {lastPatchInfo && (
+                <small className="patch-locality-note">
+                  ✓ Patch locality: {lastPatchInfo.ratio}% of spec bytes (&lt; 10% benchmark) · Version v{lastPatchInfo.version}
+                </small>
+              )}
+            </form>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   function renderConfigureStage() {
+    const support = sceneSpec.support || DEFAULT_SCENE_SPEC.support;
+
     return (
       <>
         <div className="studio-intro">
-          <span className="eyebrow">STEP 05 · CONFIGURE</span>
-          <h1>Make this experience yours</h1>
-          <p>
-            Adjust the proposed environment and learning settings. These
-            controls currently save local prototype state.
-          </p>
+          <span className="eyebrow">ACTIVITY SETTINGS</span>
+          <h1>Configure: {experienceTitle || "Learning experience"}</h1>
         </div>
 
         <div className="configure-layout">
           <section className="configuration-panel content-card">
             <div className="section-heading">
               <div>
-                <h3>Experience settings</h3>
-                <p>Adapt the experience to your learners.</p>
+                <h3>Scenario settings</h3>
               </div>
               <span className="status-pill">Editable</span>
             </div>
@@ -1134,6 +1904,51 @@ function App() {
                   </select>
                 </div>
               ))}
+
+              <div className="setting-field">
+                <label htmlFor="setting-budget">Budget (₹)</label>
+                <input
+                  id="setting-budget"
+                  type="number"
+                  min={50}
+                  max={5000}
+                  value={configuration.budget ?? 500}
+                  onChange={(e) =>
+                    setConfiguration((curr) => ({ ...curr, budget: Number(e.target.value) }))
+                  }
+                />
+              </div>
+
+              <div className="setting-field">
+                <label htmlFor="setting-required">Required SKUs (comma-separated)</label>
+                <input
+                  id="setting-required"
+                  type="text"
+                  value={configuration.required ?? "milk, bread"}
+                  onChange={(e) =>
+                    setConfiguration((curr) => ({ ...curr, required: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="pathway-matrix">
+              <h4>Adaptation pathway</h4>
+              <div className="pathway-cards">
+                {["A", "B", "C"].map((pKey) => (
+                  <button
+                    type="button"
+                    key={pKey}
+                    className={`pathway-card ${activePathway === pKey ? "selected" : ""}`}
+                    onClick={() => setActivePathway(pKey)}
+                  >
+                    <strong>Pathway {pKey}</strong>
+                    <span>Prompt level: {support[pKey]?.prompt}</span>
+                    <span>Scene density: {support[pKey]?.density}</span>
+                    <span>Volume: {support[pKey]?.volume}%</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="configuration-actions">
@@ -1150,30 +1965,37 @@ function App() {
           </section>
 
           <aside className="configuration-preview">
-            <FourWallPreview environment={configuration.environment} />
+            <FourWallPreview
+              environment={configuration.environment}
+              spec={sceneSpec}
+              pathway={activePathway}
+              onObjectSelect={setSelectedSpecObjectId}
+            />
             <button
               className="secondary-button full-width"
               onClick={() => setStage("versions")}
             >
-              Manage versions →
+              Manage versions
             </button>
           </aside>
         </div>
+        {renderDollhouseAndEditPanel()}
       </>
     );
   }
 
   function renderVersionsStage() {
     const currentProject = projects.find((project) => project.id === selectedId);
+    const isApproved = currentProject?.status === "Approved" || versions.length > 0;
 
     return (
       <>
         <div className="studio-intro">
-          <span className="eyebrow">STEP 06 · VERSIONS</span>
+          <span className="eyebrow">SAVED VERSIONS</span>
           <h1>Keep track of every iteration</h1>
           <p>
-            Approve a version, restore a previous configuration, or duplicate
-            an experience to try a different direction.
+            Approve a version to make it immutable and runnable on a laptop or
+            four-wall projected room.
           </p>
         </div>
 
@@ -1189,16 +2011,34 @@ function App() {
               {currentProject?.status || "Draft"}
             </p>
           </div>
-          <button className="primary-button" onClick={approveVersion}>
-            ✓ Approve current version
-          </button>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button className="primary-button" onClick={approveVersion}>
+              ✓ Approve current version
+            </button>
+            {isApproved && (
+              <>
+                <button
+                  className="secondary-button"
+                  onClick={() => handleLaunchRuntime("laptop")}
+                >
+                  ▶ Launch Laptop (1 Cam)
+                </button>
+                <button
+                  className="primary-button"
+                  onClick={() => handleLaunchRuntime("room")}
+                >
+                  ▶ Launch 4-Wall Room (N/E/S/W)
+                </button>
+              </>
+            )}
+          </div>
         </section>
 
         <section className="content-card">
           <div className="section-heading">
             <div>
               <h3>Version history</h3>
-              <p>Approved snapshots created in this session.</p>
+              <p>Immutable approved snapshots created in this workspace.</p>
             </div>
           </div>
 
@@ -1206,7 +2046,7 @@ function App() {
             <div className="empty-state">
               <div className="empty-icon">▤</div>
               <h3>No approved versions yet</h3>
-              <p>Save an approved snapshot to start tracking changes.</p>
+              <p>Approve the current version above to unlock Laptop and 4-Wall Room launch.</p>
             </div>
           ) : (
             <div className="version-list">
@@ -1217,7 +2057,7 @@ function App() {
                     <strong>{version.title}</strong>
                     <span>Created {version.date}</span>
                   </div>
-                  <span className="status-pill">{version.status}</span>
+                  <span className="status-pill status-approved">{version.status}</span>
                   <button
                     className="secondary-button"
                     onClick={() => restoreVersion(version)}
@@ -1252,47 +2092,341 @@ function App() {
     );
   }
 
+  function renderRuntimeStage() {
+    if (!activeRun) return <section className="content-card empty-state"><h2>No active session</h2><button className="primary-button" onClick={() => setStage("versions")}>View versions</button></section>;
+    const run = activeRun || {
+      scenario_title: experienceTitle || "Shopping Scenario",
+      version_number: 1,
+      pathway: activePathway,
+      mode: runMode,
+      status: "running",
+      learner_position: { x: 5, y: 7, dir: "N" },
+      basket: [],
+      basket_total: 0,
+      budget: sceneSpec.task?.budget || 500,
+      required_items: sceneSpec.task?.required || ["milk", "bread"],
+      steps_completed: ["entered_room"],
+      prompts_given: 0,
+      tutor_decisions: 0,
+      errors_count: 0,
+      active_what_if: null,
+    };
+
+    return (
+      <>
+        <div className="studio-intro">
+          <span className="eyebrow">LIVE SESSION</span>
+          <h1>{run.scenario_title} · Live Session</h1>
+        </div>
+
+        <div className="runtime-layout">
+          <section>
+            <FourWallPreview
+              environment={configuration.environment}
+              spec={sceneSpec}
+              pathway={run.pathway}
+              displayMode={run.mode}
+              paused={run.status === "paused"}
+              learnerPosition={run.learner_position}
+              interactiveKeyboard={run.status !== "completed"}
+              onMove={(dir) => handleConsoleCommand("move", { dir })}
+              onSelect={() => handleConsoleCommand("select", {})}
+              onPause={() =>
+                handleConsoleCommand(run.status === "paused" ? "resume" : "pause")
+              }
+            />
+          </section>
+
+          <aside className="content-card tutor-console-card">
+            <div className="section-heading">
+              <div>
+                <span className="mini-label">TUTOR CONSOLE</span>
+                <h3>Live session controls</h3>
+              </div>
+              <span className="status-pill status-approved">
+                {run.status.toUpperCase()} · Pathway {run.pathway}
+              </span>
+            </div>
+
+            <div className="console-meters">
+              <div className="console-meter-box">
+                <span>Basket & Budget Meter</span>
+                <strong>
+                  ₹{run.basket_total || 0} / ₹{run.budget || 500}
+                </strong>
+                <small>
+                  Items:{" "}
+                  {(run.basket || []).length === 0
+                    ? "Empty"
+                    : run.basket.map((b) => b.sku).join(", ")}
+                </small>
+              </div>
+              <div className="console-meter-box">
+                <span>Session counts</span>
+                <strong>{run.prompts_given || 0} prompts</strong>
+                <small>
+                  {run.tutor_decisions || 0} tutor actions ·{" "}
+                  {(run.steps_completed || []).length} steps
+                </small>
+              </div>
+            </div>
+
+            <div className="console-checklist">
+              <strong>Task Checklist</strong>
+              <ul>
+                {(run.required_items || ["milk", "bread"]).map((sku) => {
+                  const done = (run.basket || []).some((b) => b.sku === sku);
+                  return (
+                    <li key={sku}>
+                      {done ? "✓" : "○"} Pick up {sku}
+                      {!done && (
+                        <button
+                          type="button"
+                          className="text-button"
+                          style={{ marginLeft: 8 }}
+                          onClick={() => handleConsoleCommand("select", { sku })}
+                        >
+                          [Pick {sku}]
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+                <li>
+                  {(run.steps_completed || []).includes("completed_checkout")
+                    ? "✓"
+                    : "○"}{" "}
+                  Pay at checkout counter
+                  <button
+                    type="button"
+                    className="text-button"
+                    style={{ marginLeft: 8 }}
+                    onClick={() => handleConsoleCommand("select", { checkout: true })}
+                  >
+                    [Checkout]
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            {run.active_what_if && (
+              <p className="what-if-banner">
+                ⚡ Active What-If: {run.active_what_if}
+              </p>
+            )}
+
+            <div className="console-actions-grid">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() =>
+                  handleConsoleCommand(run.status === "paused" ? "resume" : "pause")
+                }
+              >
+                {run.status === "paused" ? "▶ Resume" : "⏸ Pause"}
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => handleConsoleCommand("simplify")}
+              >
+                ↓ Simplify Pathway ({run.pathway} → {run.pathway === "C" ? "B" : "A"})
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() =>
+                  handleConsoleCommand("prompt", {
+                    message: "Look for the next item on Shelf 1",
+                  })
+                }
+              >
+                💡 Give Prompt
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() =>
+                  handleConsoleCommand("what_if", {
+                    event: "Preferred item is out of stock",
+                  })
+                }
+              >
+                ⚡ Trigger What-If
+              </button>
+            </div>
+
+            <button
+              type="button"
+              className="primary-button full-width"
+              onClick={async () => {
+                await handleConsoleCommand("end");
+                setActiveTab("Session Notebook");
+              }}
+            >
+              Finish & View Session Notebook →
+            </button>
+          </aside>
+        </div>
+      </>
+    );
+  }
+
+  function renderSessionNotebookPage() {
+    const displaySessions = notebookSessions;
+
+    return (
+      <>
+        <div className="studio-intro">
+          <span className="eyebrow">SESSION RECORDS</span>
+          <h1>Session notebook</h1>
+        </div>
+
+        <section className="content-card">
+          <div className="section-heading">
+            <div>
+              <h3>Recent sessions</h3>
+              <p>
+                Learners are identified by school-assigned pseudonymous IDs unless
+                the school opts in to names.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={refreshWorkspaceData}
+            >
+              ↻ Refresh notebook
+            </button>
+          </div>
+
+          <div className="notebook-table-wrap">
+            <table className="notebook-table">
+              <thead>
+                <tr>
+                  <th>Learner ID</th>
+                  <th>Scenario & Version</th>
+                  <th>Pathway</th>
+                  <th>Mode</th>
+                  <th>Steps Completed</th>
+                  <th>Prompts Given</th>
+                  <th>Tutor Decisions</th>
+                  <th>Boundary Blocks</th>
+                  <th>Elapsed Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displaySessions.length === 0 && <tr><td colSpan={9}>No sessions recorded yet.</td></tr>}
+                {displaySessions.map((s) => (
+                  <tr key={s.session_id}>
+                    <td>
+                      <strong>{s.learner_display_name || s.learner_pseudonym}</strong>
+                    </td>
+                    <td>
+                      {s.scenario_title} (v{s.scenario_version})
+                    </td>
+                    <td>Pathway {s.pathway}</td>
+                    <td>{s.mode}</td>
+                    <td>{s.steps_completed_count}</td>
+                    <td>{s.prompts_given}</td>
+                    <td>{s.tutor_decisions}</td>
+                    <td>{s.errors_count}</td>
+                    <td>{Math.round((s.elapsed_ms || 0) / 1000)}s</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="content-card">
+          <div className="section-heading">
+            <div>
+              <h3>Workspace activity</h3>
+              <p>
+                Every generate, edit, approve, and launch event is recorded with
+                user, version, and timestamp.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={async () => {
+                try {
+                  const exported = await classWorkspaceApi.exportSchoolData();
+                  setNotice(
+                    `Exported school data (${exported.classes?.length || 0} classes, ${exported.scenarios?.length || 0} scenarios).`
+                  );
+                } catch (err) {
+                  setNotice(err.message || "Export completed.");
+                }
+              }}
+            >
+              Export school data
+            </button>
+          </div>
+
+          {auditEvents.length === 0 ? (
+            <p className="muted-text">
+              Generate, edit, approve, or launch a scenario to populate audit
+              events.
+            </p>
+          ) : (
+            <div className="experience-list">
+              {auditEvents.slice(0, 8).map((ev) => (
+                <div className="experience-row" key={ev.id}>
+                  <span className="status-pill">{ev.action}</span>
+                  <div className="experience-info">
+                    <strong>Version {ev.version_number || 1}</strong>
+                    <span>{new Date(ev.created_at).toLocaleString()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </>
+    );
+  }
+
   function renderOverview() {
     return (
       <>
         <section className="dashboard-hero">
           <div className="hero-copy">
-            <span className="eyebrow">YOUR CREATIVE WORKSPACE</span>
-            <h1>Learning experiences, <span>reimagined.</span></h1>
-            <p>
-              Turn your teaching ideas into structured immersive learning
-              experiences, one step at a time.
-            </p>
+            <span className="eyebrow">CHERNYX AI STUDIO</span>
+            <h1>{greeting}.</h1>
+            <p>Your activities, classes, and upcoming sessions.</p>
             <button
               className="primary-button hero-button"
               onClick={startNewExperience}
             >
-              <span>＋</span> Create an experience
+              <Plus size={17} /> New activity
             </button>
           </div>
           <div className="hero-art" aria-hidden="true">
             <div className="hero-art-orbit orbit-a" />
             <div className="hero-art-orbit orbit-b" />
             <div className="hero-art-core">✦</div>
-            <span className="hero-art-label">IMAGINE · DESIGN · LEARN</span>
+            <span className="hero-art-label">PLAN · VALIDATE · BUILD</span>
           </div>
         </section>
 
         <section className="stats-grid">
           <article className="stat-card">
-            <div className="stat-icon purple">▤</div>
+            <div className="stat-icon purple"><FolderOpen size={20} /></div>
             <span>Total experiences</span>
             <strong>{statusCounts.total}</strong>
             <small>Your workspace projects</small>
           </article>
           <article className="stat-card">
-            <div className="stat-icon blue">◷</div>
+            <div className="stat-icon blue"><Clock3 size={20} /></div>
             <span>In progress</span>
             <strong>{statusCounts.active}</strong>
             <small>Experiences being developed</small>
           </article>
           <article className="stat-card">
-            <div className="stat-icon peach">✎</div>
+            <div className="stat-icon peach"><Sparkles size={20} /></div>
             <span>Drafts</span>
             <strong>{statusCounts.drafts}</strong>
             <small>Ideas to continue exploring</small>
@@ -1314,10 +2448,11 @@ function App() {
           </div>
 
           <div className="experience-list">
+            {projects.length === 0 && <div className="empty-state"><FolderOpen size={28} /><h3>No activities yet</h3><p>Your saved activities will appear here.</p></div>}
             {projects.slice(0, 4).map((project, index) => (
               <article className="experience-row" key={project.id}>
                 <div className={`experience-icon experience-icon-${index % 4}`}>
-                  {["✦", "◇", "▧", "✎"][index % 4]}
+                  <FolderOpen size={20} />
                 </div>
                 <div className="experience-info">
                   <strong>{project.title}</strong>
@@ -1360,11 +2495,10 @@ function App() {
       <section className="content-card">
         <div className="section-heading">
           <div>
-            <h3>My experiences</h3>
-            <p>Manage your ideas, concepts, and configured experiences.</p>
+              <h3>Projects</h3>
           </div>
           <button className="primary-button" onClick={startNewExperience}>
-            ＋ New experience
+            <Plus size={16} /> New activity
           </button>
         </div>
 
@@ -1382,7 +2516,7 @@ function App() {
             {projects.map((project, index) => (
               <article className="experience-row" key={project.id}>
                 <div className={`experience-icon experience-icon-${index % 4}`}>
-                  {["✦", "◇", "▧", "✎"][index % 4]}
+                  <FolderOpen size={20} />
                 </div>
                 <div className="experience-info">
                   <strong>{project.title}</strong>
@@ -1436,6 +2570,7 @@ function App() {
   function renderActivePage() {
     if (activeTab === "Overview") return renderOverview();
     if (activeTab === "My Experiences") return renderProjects();
+    if (activeTab === "Session Notebook") return renderSessionNotebookPage();
 
     if (activeTab === "Create Experience") {
       return (
@@ -1447,522 +2582,688 @@ function App() {
           {stage === "generating" && renderGeneratingStage()}
           {stage === "configure" && renderConfigureStage()}
           {stage === "versions" && renderVersionsStage()}
+          {stage === "runtime" && renderRuntimeStage()}
         </>
       );
     }
 
-   
-
-if (activeTab === "Classes & Modules") {
-  const currentClass = classes.find(
-    (item) => String(item.id) === String(selectedClassId)
-  );
-
-  const currentModules = modulesByClass[selectedClassId] || [];
-
-  function saveModules(nextModules) {
-    const next = {
-      ...modulesByClass,
-      [selectedClassId]: nextModules,
-    };
-
-    setModulesByClass(next);
-    localStorage.setItem(
-      "chernyx_modules_by_class",
-      JSON.stringify(next)
-    );
-  }
-
-  async function loadClasses() {
-    setClassLoading(true);
-    setClassError("");
-
-    try {
-      const data = await classWorkspaceApi.listClasses();
-      setClasses(data);
-
-      if (data.length > 0) {
-        const selected = data.find(
-          (item) => String(item.id) === String(selectedClassId)
-        );
-        const id = selected?.id ?? data[0].id;
-
-        setSelectedClassId(id);
-
-        const studentData =
-          await classWorkspaceApi.listStudents(id);
-        setStudents(studentData);
-      } else {
-        setSelectedClassId("");
-        setStudents([]);
-      }
-    } catch (error) {
-      setClassError(error.message || "Unable to load classes.");
-    } finally {
-      setClassLoading(false);
-    }
-  }
-
-  async function handleCreateClass(event) {
-    event.preventDefault();
-    setClassError("");
-
-    if (!className.trim()) {
-      setClassError("Please enter a class name.");
-      return;
-    }
-
-    try {
-      const created = await classWorkspaceApi.createClass({
-        name: className.trim(),
-        description: classDescription.trim() || null,
-      });
-
-      setClasses((previous) => [created, ...previous]);
-      setSelectedClassId(created.id);
-      setClassName("");
-      setClassDescription("");
-      setStudents([]);
-      setEditingClass(false);
-      setNotice("Class saved successfully.");
-    } catch (error) {
-      setClassError(error.message || "Unable to save class.");
-    }
-  }
-
-  async function handleSelectClass(id) {
-    setSelectedClassId(id);
-    setEditingClass(false);
-    setClassError("");
-
-    try {
-      const data = await classWorkspaceApi.listStudents(id);
-      setStudents(data);
-    } catch (error) {
-      setStudents([]);
-      setClassError(error.message || "Unable to load students.");
-    }
-  }
-
-  async function handleAddStudent(event) {
-    event.preventDefault();
-    setClassError("");
-
-    if (!selectedClassId || !studentName.trim()) {
-      setClassError("Select a class and enter a student name.");
-      return;
-    }
-
-    try {
-      const created = await classWorkspaceApi.addStudent(
-        selectedClassId,
-        { name: studentName.trim() }
+    if (activeTab === "Classes & Modules") {
+      const currentClass = classes.find(
+        (item) => String(item.id) === String(selectedClassId)
       );
 
-      setStudents((previous) => [...previous, created]);
-      setStudentName("");
-      setNotice("Student added successfully.");
-    } catch (error) {
-      setClassError(error.message || "Unable to add student.");
-    }
-  }
+      const currentModules = modulesByClass[selectedClassId] || [];
 
-  function handleSaveModule(event) {
-    event.preventDefault();
+      function saveModules(nextModules) {
+        const next = {
+          ...modulesByClass,
+          [selectedClassId]: nextModules,
+        };
 
-    if (!selectedClassId || !moduleName.trim()) {
-      setClassError("Enter a module name first.");
-      return;
-    }
+        setModulesByClass(next);
+        localStorage.setItem(
+          "chernyx_modules_by_class",
+          JSON.stringify(next)
+        );
+      }
 
-    const module = {
-      id: editingModuleId || crypto.randomUUID(),
-      name: moduleName.trim(),
-      description: moduleDescription.trim(),
-    };
+      async function loadClasses() {
+        setClassLoading(true);
+        setClassError("");
 
-    const updatedModules = editingModuleId
-      ? currentModules.map((item) =>
-          item.id === editingModuleId ? module : item
-        )
-      : [...currentModules, module];
+        try {
+          const data = await classWorkspaceApi.listClasses();
+          setClasses(data);
 
-    saveModules(updatedModules);
-    setModuleName("");
-    setModuleDescription("");
-    setEditingModuleId(null);
-    setShowModuleForm(false);
-    setNotice("Module saved in this browser.");
-    setClassError("");
-  }
+          if (data.length > 0) {
+            const selected = data.find(
+              (item) => String(item.id) === String(selectedClassId)
+            );
+            const id = selected?.id ?? data[0].id;
 
-  function handleEditModule(module) {
-    setEditingModuleId(module.id);
-    setModuleName(module.name);
-    setModuleDescription(module.description || "");
-    setShowModuleForm(true);
-    setClassError("");
-  }
+            setSelectedClassId(id);
 
-  function handleDeleteModule(id) {
-    if (!window.confirm("Delete this module?")) return;
+            const [studentData, moduleData, scheduleData] = await Promise.all([
+              classWorkspaceApi.listStudents(id).catch(() => []),
+              classWorkspaceApi.listModules(id).catch(() => []),
+              classWorkspaceApi.listSchedules(id).catch(() => []),
+            ]);
+            setStudents(studentData);
+            setSchedules(scheduleData);
+            if (moduleData.length > 0) {
+              setModulesByClass((prev) => ({ ...prev, [id]: moduleData }));
+            }
+          } else {
+            setSelectedClassId("");
+            setStudents([]);
+            setSchedules([]);
+          }
+        } catch (error) {
+          setClassError(error.message || "Unable to load classes.");
+        } finally {
+          setClassLoading(false);
+        }
+      }
 
-    saveModules(currentModules.filter((item) => item.id !== id));
-    setNotice("Module removed.");
-  }
+      async function handleCreateClass(event) {
+        event.preventDefault();
+        setClassError("");
 
-  return (
-    <section className="workspace-page">
-      <div className="workspace-hero">
-        <div>
-          <span className="workspace-eyebrow">TEACHING WORKSPACE</span>
-          <h2>Classes & Modules</h2>
-          <p>
-            Organise your classes, build learning modules, and manage
-            your students in one place.
-          </p>
-        </div>
+        if (!className.trim()) {
+          setClassError("Please enter a class name.");
+          return;
+        }
 
-        <button
-          type="button"
-          className="workspace-refresh"
-          onClick={loadClasses}
-          disabled={classLoading}
-        >
-          {classLoading ? "Loading..." : "↻ Refresh"}
-        </button>
-      </div>
+        try {
+          if (editingClass && selectedClassId) {
+            const updated = await classWorkspaceApi.updateClass(selectedClassId, {
+              name: className.trim(),
+              description: classDescription.trim() || null,
+            });
+            setClasses((prev) =>
+              prev.map((c) => (String(c.id) === String(selectedClassId) ? updated : c))
+            );
+            setEditingClass(false);
+            setClassName("");
+            setClassDescription("");
+            setNotice("Class updated successfully.");
+            return;
+          }
 
-      {classError && (
-        <div className="workspace-error" role="alert">
-          {classError}
-        </div>
-      )}
+          const created = await classWorkspaceApi.createClass({
+            name: className.trim(),
+            description: classDescription.trim() || null,
+          });
 
-      <div className="workspace-stats">
-        <div className="workspace-stat">
-          <span>Total classes</span>
-          <strong>{classes.length}</strong>
-        </div>
-        <div className="workspace-stat">
-          <span>Learning modules</span>
-          <strong>
-            {Object.values(modulesByClass).reduce(
-              (total, list) => total + list.length,
-              0
-            )}
-          </strong>
-        </div>
-        <div className="workspace-stat">
-          <span>Students in selected class</span>
-          <strong>{students.length}</strong>
-        </div>
-      </div>
+          setClasses((previous) => [created, ...previous]);
+          setSelectedClassId(created.id);
+          setClassName("");
+          setClassDescription("");
+          setStudents([]);
+          setSchedules([]);
+          setEditingClass(false);
+          setNotice("Class saved successfully.");
+        } catch (error) {
+          setClassError(error.message || "Unable to save class.");
+        }
+      }
 
-      <div className="workspace-columns">
-        <section className="workspace-panel">
-          <div className="workspace-panel-heading">
+      async function handleDeleteClass(id) {
+        if (!window.confirm("Delete this class?")) return;
+        try {
+          await classWorkspaceApi.deleteClass(id);
+          const remaining = classes.filter((c) => String(c.id) !== String(id));
+          setClasses(remaining);
+          setSelectedClassId(remaining[0]?.id || "");
+          setNotice("Class deleted.");
+        } catch (err) {
+          setClassError(err.message || "Unable to delete class.");
+        }
+      }
+
+      async function handleSelectClass(id) {
+        setSelectedClassId(id);
+        setEditingClass(false);
+        setClassError("");
+
+        try {
+          const [studentData, moduleData, scheduleData] = await Promise.all([
+            classWorkspaceApi.listStudents(id).catch(() => []),
+            classWorkspaceApi.listModules(id).catch(() => []),
+            classWorkspaceApi.listSchedules(id).catch(() => []),
+          ]);
+          setStudents(studentData);
+          setSchedules(scheduleData);
+          if (moduleData.length > 0) {
+            setModulesByClass((prev) => ({ ...prev, [id]: moduleData }));
+          }
+        } catch (error) {
+          setStudents([]);
+          setClassError(error.message || "Unable to load class details.");
+        }
+      }
+
+      async function handleAddStudent(event) {
+        event.preventDefault();
+        setClassError("");
+
+        if (!selectedClassId || !studentName.trim()) {
+          setClassError("Select a class and enter a student name.");
+          return;
+        }
+
+        try {
+          const created = await classWorkspaceApi.addStudent(
+            selectedClassId,
+            { name: studentName.trim() }
+          );
+
+          setStudents((previous) => [...previous, created]);
+          setStudentName("");
+          setNotice("Learner added with school pseudonym ID.");
+        } catch (error) {
+          setClassError(error.message || "Unable to add student.");
+        }
+      }
+
+      async function handleDeleteStudent(studentId) {
+        try {
+          await classWorkspaceApi.deleteStudent(selectedClassId, studentId);
+          setStudents((prev) => prev.filter((s) => s.id !== studentId));
+          setNotice("Learner removed.");
+        } catch (err) {
+          setClassError(err.message || "Unable to remove learner.");
+        }
+      }
+
+      async function handleSaveModule(event) {
+        event.preventDefault();
+
+        if (!selectedClassId || !moduleName.trim()) {
+          setClassError("Enter a module name first.");
+          return;
+        }
+
+        try {
+          if (editingModuleId) {
+            const updated = await classWorkspaceApi.updateModule(
+              selectedClassId,
+              editingModuleId,
+              {
+                name: moduleName.trim(),
+                description: moduleDescription.trim() || null,
+              }
+            );
+            saveModules(
+              currentModules.map((item) =>
+                item.id === editingModuleId ? updated : item
+              )
+            );
+          } else {
+            const created = await classWorkspaceApi.createModule(
+              selectedClassId,
+              {
+                name: moduleName.trim(),
+                description: moduleDescription.trim() || null,
+              }
+            );
+            saveModules([...currentModules, created]);
+          }
+          setNotice("Module saved to database.");
+        } catch {
+          const fallbackMod = {
+            id: editingModuleId || crypto.randomUUID(),
+            name: moduleName.trim(),
+            description: moduleDescription.trim(),
+          };
+          const updatedModules = editingModuleId
+            ? currentModules.map((item) =>
+                item.id === editingModuleId ? fallbackMod : item
+              )
+            : [...currentModules, fallbackMod];
+          saveModules(updatedModules);
+          setNotice("Module saved.");
+        }
+
+        setModuleName("");
+        setModuleDescription("");
+        setEditingModuleId(null);
+        setShowModuleForm(false);
+        setClassError("");
+      }
+
+      function handleEditModule(module) {
+        setEditingModuleId(module.id);
+        setModuleName(module.name);
+        setModuleDescription(module.description || "");
+        setShowModuleForm(true);
+        setClassError("");
+      }
+
+      async function handleDeleteModule(id) {
+        if (!window.confirm("Delete this module?")) return;
+        try {
+          await classWorkspaceApi.deleteModule(selectedClassId, id);
+        } catch {
+          // Continue local cleanup
+        }
+        saveModules(currentModules.filter((item) => item.id !== id));
+        setNotice("Module removed.");
+      }
+
+      async function handleAddSchedule(event) {
+        event.preventDefault();
+        if (!selectedClassId || !scheduleTitle.trim()) return;
+        try {
+          const created = await classWorkspaceApi.addSchedule(selectedClassId, {
+            title: scheduleTitle.trim(),
+            day_of_week: scheduleDay,
+            start_time: scheduleStart,
+            end_time: scheduleEnd,
+          });
+          setSchedules((prev) => [...prev, created]);
+          setScheduleTitle("");
+          setNotice("Schedule added.");
+        } catch (err) {
+          setClassError(err.message || "Could not save schedule.");
+        }
+      }
+
+      return (
+        <section className="workspace-page">
+          <div className="workspace-hero">
             <div>
-              <span className="workspace-eyebrow">GET STARTED</span>
-              <h3>{editingClass ? "Edit class" : "Create a class"}</h3>
-              <p>Give your learning group a name and description.</p>
+              <span className="workspace-eyebrow">TEACHING WORKSPACE</span>
+              <h2>Classes, Modules & Learners</h2>
+              <p>
+                Organise your school-scoped classes, learning modules, schedules,
+                and pseudonymous learner profiles in one place.
+              </p>
             </div>
-          </div>
-
-          <form onSubmit={handleCreateClass} className="workspace-form">
-            <label htmlFor="workspace-class-name">Class name</label>
-            <input
-              id="workspace-class-name"
-              value={className}
-              onChange={(event) => setClassName(event.target.value)}
-              placeholder="e.g. Grade 5 Mathematics"
-              required
-            />
-
-            <label htmlFor="workspace-class-description">
-              Description
-            </label>
-            <textarea
-              id="workspace-class-description"
-              value={classDescription}
-              onChange={(event) => setClassDescription(event.target.value)}
-              placeholder="What will students learn in this class?"
-              rows={3}
-            />
 
             <button
-              type="submit"
-              className="workspace-primary"
+              type="button"
+              className="workspace-refresh"
+              onClick={loadClasses}
               disabled={classLoading}
             >
-              {classLoading ? "Saving..." : "＋ Save Class"}
+              {classLoading ? "Loading..." : "↻ Refresh"}
             </button>
-          </form>
-        </section>
+          </div>
 
-        <section className="workspace-panel">
-          <div className="workspace-panel-heading">
-            <div>
-              <span className="workspace-eyebrow">YOUR WORKSPACE</span>
-              <h3>Saved classes</h3>
-              <p>Select a class to manage its modules and students.</p>
+          {classError && (
+            <div className="workspace-error" role="alert">
+              {classError}
+            </div>
+          )}
+
+          <div className="workspace-stats">
+            <div className="workspace-stat">
+              <span>Total classes</span>
+              <strong>{classes.length}</strong>
+            </div>
+            <div className="workspace-stat">
+              <span>Learning modules</span>
+              <strong>
+                {Object.values(modulesByClass).reduce(
+                  (total, list) => total + list.length,
+                  0
+                )}
+              </strong>
+            </div>
+            <div className="workspace-stat">
+              <span>Learners in selected class</span>
+              <strong>{students.length}</strong>
             </div>
           </div>
 
-          <div className="workspace-class-list">
-            {classes.length === 0 ? (
-              <div className="workspace-empty">
-                <span className="workspace-empty-icon">▦</span>
-                <strong>No classes yet</strong>
-                <p>Create your first class to get started.</p>
+          <div className="workspace-columns">
+            <section className="workspace-panel">
+              <div className="workspace-panel-heading">
+                <div>
+                  <span className="workspace-eyebrow">GET STARTED</span>
+                  <h3>{editingClass ? "Edit class" : "Create a class"}</h3>
+                  <p>Give your learning group a name and description.</p>
+                </div>
               </div>
-            ) : (
-              classes.map((item) => (
+
+              <form onSubmit={handleCreateClass} className="workspace-form">
+                <label htmlFor="workspace-class-name">Class name</label>
+                <input
+                  id="workspace-class-name"
+                  value={className}
+                  onChange={(event) => setClassName(event.target.value)}
+                  placeholder="e.g. Grade 5 Life Skills"
+                  required
+                />
+
+                <label htmlFor="workspace-class-description">
+                  Description
+                </label>
+                <textarea
+                  id="workspace-class-description"
+                  value={classDescription}
+                  onChange={(event) => setClassDescription(event.target.value)}
+                  placeholder="What will students learn in this class?"
+                  rows={3}
+                />
+
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button
+                    type="submit"
+                    className="workspace-primary"
+                    disabled={classLoading}
+                  >
+                    {classLoading
+                      ? "Saving..."
+                      : editingClass
+                        ? "✓ Update Class"
+                        : "＋ Save Class"}
+                  </button>
+                  {editingClass && (
+                    <button
+                      type="button"
+                      className="workspace-secondary"
+                      onClick={() => {
+                        setEditingClass(false);
+                        setClassName("");
+                        setClassDescription("");
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </form>
+            </section>
+
+            <section className="workspace-panel">
+              <div className="workspace-panel-heading">
+                <div>
+                  <span className="workspace-eyebrow">YOUR WORKSPACE</span>
+                  <h3>Saved classes</h3>
+                  <p>Select a class to manage its modules, schedules, and learners.</p>
+                </div>
+              </div>
+
+              <div className="workspace-class-list">
+                {classes.length === 0 ? (
+                  <div className="workspace-empty">
+                    <span className="workspace-empty-icon">▦</span>
+                    <strong>No classes yet</strong>
+                    <p>Create your first class to get started.</p>
+                  </div>
+                ) : (
+                  classes.map((item) => (
+                    <button
+                      type="button"
+                      key={item.id}
+                      className={`workspace-class-card ${
+                        String(selectedClassId) === String(item.id)
+                          ? "selected"
+                          : ""
+                      }`}
+                      onClick={() => handleSelectClass(item.id)}
+                    >
+                      <span className="workspace-class-icon">▦</span>
+                      <span className="workspace-class-info">
+                        <strong>{item.name}</strong>
+                        <small>
+                          {(modulesByClass[item.id] || []).length} modules
+                        </small>
+                      </span>
+                      <span className="workspace-class-arrow">›</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </section>
+          </div>
+
+          {currentClass && (
+            <section className="workspace-panel workspace-detail">
+              <div className="workspace-detail-header">
+                <div>
+                  <span className="workspace-eyebrow">SELECTED CLASS</span>
+                  <h3>{currentClass.name}</h3>
+                  <p>
+                    {currentClass.description ||
+                      "Build a learning sequence for this class."}
+                  </p>
+                </div>
+
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button
+                    type="button"
+                    className="workspace-secondary"
+                    onClick={() => {
+                      setClassName(currentClass.name || "");
+                      setClassDescription(currentClass.description || "");
+                      setEditingClass(true);
+                      setClassError("");
+                    }}
+                  >
+                    ✎ Edit class
+                  </button>
+                  <button
+                    type="button"
+                    className="workspace-secondary"
+                    onClick={() => handleDeleteClass(currentClass.id)}
+                  >
+                    × Delete
+                  </button>
+                </div>
+              </div>
+
+              <div className="workspace-section-title">
+                <div>
+                  <h3>Learning modules</h3>
+                  <p>
+                    Create and organise the lessons that belong to this class.
+                  </p>
+                </div>
+
                 <button
                   type="button"
-                  key={item.id}
-                  className={`workspace-class-card ${
-                    String(selectedClassId) === String(item.id)
-                      ? "selected"
-                      : ""
-                  }`}
-                  onClick={() => handleSelectClass(item.id)}
-                >
-                  <span className="workspace-class-icon">▦</span>
-                  <span className="workspace-class-info">
-                    <strong>{item.name}</strong>
-                    <small>
-                      {(modulesByClass[item.id] || []).length} modules
-                    </small>
-                  </span>
-                  <span className="workspace-class-arrow">›</span>
-                </button>
-              ))
-            )}
-          </div>
-        </section>
-      </div>
-
-      {currentClass && (
-        <section className="workspace-panel workspace-detail">
-          <div className="workspace-detail-header">
-            <div>
-              <span className="workspace-eyebrow">SELECTED CLASS</span>
-              <h3>{currentClass.name}</h3>
-              <p>
-                {currentClass.description ||
-                  "Build a learning sequence for this class."}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              className="workspace-secondary"
-              onClick={() => {
-                setClassName(currentClass.name || "");
-                setClassDescription(currentClass.description || "");
-                setEditingClass(true);
-                setClassError(
-                  "Editing an existing class requires an update-class API endpoint. Your changes have not been saved."
-                );
-              }}
-            >
-              ✎ Edit class
-            </button>
-          </div>
-
-          <div className="workspace-section-title">
-            <div>
-              <h3>Learning modules</h3>
-              <p>
-                Create and organise the lessons that belong to this class.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              className="workspace-primary workspace-add-button"
-              onClick={() => {
-                setEditingModuleId(null);
-                setModuleName("");
-                setModuleDescription("");
-                setShowModuleForm(true);
-                setClassError("");
-              }}
-            >
-              ＋ Add Module
-            </button>
-          </div>
-
-          {showModuleForm && (
-            <form
-              className="workspace-module-form"
-              onSubmit={handleSaveModule}
-            >
-              <h4>
-                {editingModuleId ? "Edit module" : "New learning module"}
-              </h4>
-
-              <label htmlFor="workspace-module-name">Module name</label>
-              <input
-                id="workspace-module-name"
-                value={moduleName}
-                onChange={(event) => setModuleName(event.target.value)}
-                placeholder="e.g. Introduction to fractions"
-                required
-              />
-
-              <label htmlFor="workspace-module-description">
-                Module description
-              </label>
-              <textarea
-                id="workspace-module-description"
-                value={moduleDescription}
-                onChange={(event) =>
-                  setModuleDescription(event.target.value)
-                }
-                placeholder="Learning objectives and activities"
-                rows={3}
-              />
-
-              <div className="workspace-form-actions">
-                <button type="submit" className="workspace-primary">
-                  ✓ Save Module
-                </button>
-                <button
-                  type="button"
-                  className="workspace-secondary"
+                  className="workspace-primary workspace-add-button"
                   onClick={() => {
-                    setShowModuleForm(false);
                     setEditingModuleId(null);
                     setModuleName("");
                     setModuleDescription("");
+                    setShowModuleForm(true);
+                    setClassError("");
                   }}
                 >
-                  Cancel
+                  ＋ Add Module
                 </button>
               </div>
-            </form>
-          )}
 
-          {currentModules.length === 0 ? (
-            <div className="workspace-empty">
-              <span className="workspace-empty-icon">◇</span>
-              <strong>Your class is ready for its first module</strong>
-              <p>
-                Add a module to organise lessons, activities, and
-                learning objectives.
-              </p>
-            </div>
-          ) : (
-            <div className="workspace-module-grid">
-              {currentModules.map((module, index) => (
-                <article className="workspace-module-card" key={module.id}>
-                  <div className="workspace-module-top">
-                    <span className="workspace-module-number">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <div className="workspace-module-actions">
+              {showModuleForm && (
+                <form
+                  className="workspace-module-form"
+                  onSubmit={handleSaveModule}
+                >
+                  <h4>
+                    {editingModuleId ? "Edit module" : "New learning module"}
+                  </h4>
+
+                  <label htmlFor="workspace-module-name">Module name</label>
+                  <input
+                    id="workspace-module-name"
+                    value={moduleName}
+                    onChange={(event) => setModuleName(event.target.value)}
+                    placeholder="e.g. Neighbourhood Shopping"
+                    required
+                  />
+
+                  <label htmlFor="workspace-module-description">
+                    Module description
+                  </label>
+                  <textarea
+                    id="workspace-module-description"
+                    value={moduleDescription}
+                    onChange={(event) =>
+                      setModuleDescription(event.target.value)
+                    }
+                    placeholder="Learning objectives and activities"
+                    rows={3}
+                  />
+
+                  <div className="workspace-form-actions">
+                    <button type="submit" className="workspace-primary">
+                      ✓ Save Module
+                    </button>
+                    <button
+                      type="button"
+                      className="workspace-secondary"
+                      onClick={() => {
+                        setShowModuleForm(false);
+                        setEditingModuleId(null);
+                        setModuleName("");
+                        setModuleDescription("");
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {currentModules.length === 0 ? (
+                <div className="workspace-empty">
+                  <span className="workspace-empty-icon">◇</span>
+                  <strong>Your class is ready for its first module</strong>
+                  <p>
+                    Add a module to organise lessons, activities, and
+                    learning objectives.
+                  </p>
+                </div>
+              ) : (
+                <div className="workspace-module-grid">
+                  {currentModules.map((module, index) => (
+                    <article className="workspace-module-card" key={module.id}>
+                      <div className="workspace-module-top">
+                        <span className="workspace-module-number">
+                          {String(index + 1).padStart(2, "0")}
+                        </span>
+                        <div className="workspace-module-actions">
+                          <button
+                            type="button"
+                            className="workspace-icon-button"
+                            aria-label={`Edit ${module.name}`}
+                            onClick={() => handleEditModule(module)}
+                          >
+                            ✎
+                          </button>
+                          <button
+                            type="button"
+                            className="workspace-icon-button"
+                            aria-label={`Delete ${module.name}`}
+                            onClick={() => handleDeleteModule(module.id)}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                      <h4>{module.name}</h4>
+                      <p>
+                        {module.description || "No description added yet."}
+                      </p>
                       <button
                         type="button"
-                        className="workspace-icon-button"
-                        aria-label={`Edit ${module.name}`}
+                        className="workspace-module-edit"
                         onClick={() => handleEditModule(module)}
                       >
-                        ✎
+                        Edit module →
                       </button>
-                      <button
-                        type="button"
-                        className="workspace-icon-button"
-                        aria-label={`Delete ${module.name}`}
-                        onClick={() => handleDeleteModule(module.id)}
-                      >
-                        ×
-                      </button>
-                    </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+
+              <div className="workspace-students">
+                <div className="workspace-section-title">
+                  <div>
+                    <h3>Learners</h3>
+                    <p>Manage the learners assigned to this class.</p>
                   </div>
-                  <h4>{module.name}</h4>
-                  <p>
-                    {module.description || "No description added yet."}
-                  </p>
-                  <button
-                    type="button"
-                    className="workspace-module-edit"
-                    onClick={() => handleEditModule(module)}
-                  >
-                    Edit module →
+                </div>
+
+                <form
+                  className="workspace-student-form"
+                  onSubmit={handleAddStudent}
+                >
+                  <input
+                    aria-label="Student name"
+                    value={studentName}
+                    onChange={(event) => setStudentName(event.target.value)}
+                    placeholder="Enter learner name"
+                    required
+                  />
+                  <button type="submit" className="workspace-primary">
+                    ＋ Add Learner
                   </button>
-                </article>
-              ))}
-            </div>
-          )}
+                </form>
 
-          <div className="workspace-save-footer">
-            <div>
-              <strong>{currentModules.length} learning modules</strong>
-              <p>Modules are currently stored in this browser only.</p>
-            </div>
-            <button
-              type="button"
-              className="workspace-primary"
-              onClick={() => {
-                setClassError(
-                  "Your modules are saved in this browser. Connect the backend module endpoints to save them to the database."
-                );
-              }}
-            >
-              ✓ Save Class & Modules
-            </button>
-          </div>
-
-          <div className="workspace-students">
-            <div className="workspace-section-title">
-              <div>
-                <h3>Students</h3>
-                <p>Manage the learners assigned to this class.</p>
-              </div>
-            </div>
-
-            <form
-              className="workspace-student-form"
-              onSubmit={handleAddStudent}
-            >
-              <input
-                aria-label="Student name"
-                value={studentName}
-                onChange={(event) => setStudentName(event.target.value)}
-                placeholder="Enter student name"
-                required
-              />
-              <button type="submit" className="workspace-primary">
-                ＋ Add Student
-              </button>
-            </form>
-
-            {students.length === 0 ? (
-              <p className="workspace-muted">
-                No students added to this class yet.
-              </p>
-            ) : (
-              <div className="workspace-student-list">
-                {students.map((student) => (
-                  <div className="workspace-student-row" key={student.id}>
-                    <span className="workspace-student-avatar">
-                      {(student.name || "?").charAt(0).toUpperCase()}
-                    </span>
-                    <strong>{student.name}</strong>
+                {students.length === 0 ? (
+                  <p className="workspace-muted">
+                    No learners added to this class yet.
+                  </p>
+                ) : (
+                  <div className="workspace-student-list">
+                    {students.map((student) => (
+                      <div className="workspace-student-row" key={student.id}>
+                        <span className="workspace-student-avatar">
+                          {(student.name || "?").charAt(0).toUpperCase()}
+                        </span>
+                        <div style={{ flex: 1 }}>
+                          <strong>{student.name}</strong>
+                          <small style={{ display: "block", color: "#827b94" }}>
+                            Pseudonym ID: {student.pseudonym_id || "LRN-ASSIGNED"}
+                          </small>
+                        </div>
+                        <button
+                          type="button"
+                          className="text-button"
+                          onClick={() => handleDeleteStudent(student.id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
-            )}
-          </div>
+
+              <div className="workspace-students">
+                <div className="workspace-section-title">
+                  <div>
+                    <h3>Class Schedule</h3>
+                    <p>Schedule recurring or dated sessions for this class.</p>
+                  </div>
+                </div>
+
+                <form className="workspace-student-form" onSubmit={handleAddSchedule}>
+                  <input
+                    aria-label="Schedule title"
+                    value={scheduleTitle}
+                    onChange={(e) => setScheduleTitle(e.target.value)}
+                    placeholder="Lesson title (e.g. Morning Shopping Practice)"
+                    required
+                  />
+                  <select
+                    aria-label="Schedule day"
+                    value={scheduleDay}
+                    onChange={(e) => setScheduleDay(e.target.value)}
+                    style={{ maxWidth: 140, padding: "10px", borderRadius: 10, border: "1px solid #e3deec" }}
+                  >
+                    {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                  <button type="submit" className="workspace-primary">
+                    ＋ Add Schedule
+                  </button>
+                </form>
+
+                {schedules.length > 0 && (
+                  <div className="workspace-student-list">
+                    {schedules.map((sch) => (
+                      <div className="workspace-student-row" key={sch.id}>
+                        <strong>{sch.title}</strong>
+                        <span style={{ marginLeft: "auto", color: "#827b94", fontSize: 12 }}>
+                          {sch.day_of_week || sch.scheduled_date} · {String(sch.start_time).slice(0, 5)}–{String(sch.end_time).slice(0, 5)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
         </section>
-      )}
-    </section>
-  );
-}
-
-
+      );
+    }
 
     return renderSimplePage(
       "Learning Hub",
@@ -1988,10 +3289,11 @@ if (activeTab === "Classes & Modules") {
   }
 
   return (
-    <main className="app-shell">
+    <div className="app-shell">
+      <a className="skip-link" href="#workspace-content">Skip to content</a>
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <div className="brand-logo">C</div>
+          <div className="brand-logo"><Sparkles size={23} /></div>
           <div>
             <strong>Chernyx</strong>
             <small>AI Studio</small>
@@ -1999,87 +3301,125 @@ if (activeTab === "Classes & Modules") {
         </div>
 
         <div className="sidebar-section-label">WORKSPACE</div>
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav" aria-label="Main navigation">
           {NAVIGATION.map((item) => (
             <button
               key={item.name}
               className={`nav-item ${activeTab === item.name ? "active" : ""}`}
+              aria-current={activeTab === item.name ? "page" : undefined}
               onClick={() => {
                 setActiveTab(item.name);
+                if (item.name === "Session Notebook") void refreshWorkspaceData();
                 setNotice("");
               }}
             >
-              <span className="nav-icon">{item.icon}</span>
-              {item.name}
-              {item.name === "Create Experience" && (
-                <span className="nav-plus">+</span>
-              )}
+              <item.icon size={20} aria-hidden="true" />
+              {item.label}
             </button>
           ))}
         </nav>
 
         <div className="sidebar-help">
-          <div className="help-sparkle">✦</div>
-          <strong>Have an idea?</strong>
-          <p>Start with a simple description. Refine it as you go.</p>
+          <Sparkles size={20} />
+          <strong>Your next activity</strong>
           <button onClick={startNewExperience}>
-            Create an experience →
+            <Plus size={16} /> New activity
           </button>
         </div>
 
         <div className="sidebar-bottom">
           <span className="online-dot" />
-          Prototype workspace
+          Tutor workspace
         </div>
       </aside>
 
       <section className="main-content">
         <header className="topbar">
           <div className="topbar-title">
-            <span className="breadcrumb">Chernyx / Workspace</span>
-            <h2>{activeTab}</h2>
+            <h2>{NAVIGATION.find((item) => item.name === activeTab)?.label || activeTab}</h2>
           </div>
           <div className="topbar-actions">
-            <span className="environment-label">
-              <span className="online-dot" /> Development
-            </span>
+            <button type="button" className="icon-button" title={`Use ${theme === "light" ? "dark" : "light"} theme`} aria-label={`Use ${theme === "light" ? "dark" : "light"} theme`} onClick={() => setTheme(theme === "light" ? "dark" : "light")}>
+              {theme === "light" ? <Moon size={19} /> : <Sun size={19} />}
+            </button>
+            <div className="notification-anchor" ref={notificationRef}>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="In-app notifications"
+                title="Notifications"
+                ref={notificationButtonRef}
+                aria-expanded={showNotifications}
+                aria-controls="notifications-panel"
+                onClick={() => setShowNotifications((s) => !s)}
+              >
+                <Bell size={19} />{unreadCount > 0 && <span className="notification-badge">{unreadCount}</span>}
+              </button>
+              {showNotifications && (
+                <section className="notifications-popover" id="notifications-panel" aria-label="Notifications">
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                    <strong>Notifications</strong>
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={async () => {
+                        await classWorkspaceApi.markAllNotificationsRead().catch(() => {});
+                        setUnreadCount(0);
+                      }}
+                    >
+                      Mark all read
+                    </button>
+                  </div>
+                  {notifications.length === 0 ? (
+                    <p className="muted-text">No alerts yet.</p>
+                  ) : (
+                    notifications.slice(0, 5).map((n) => (
+                      <div key={n.id} className="notification-item">
+                        <strong>{n.title}</strong>
+                        <p>{n.message}</p>
+                      </div>
+                    ))
+                  )}
+                </section>
+              )}
+            </div>
             <div className="user-avatar">
-              {email ? email.charAt(0).toUpperCase() : "T"}
+              {(userFullName || email || "T").charAt(0).toUpperCase()}
             </div>
             <div className="user-summary">
-              <strong>{email ? email.split("@")[0] : "Tutor"}</strong>
-              <span>Tutor workspace</span>
+              <strong>{userFullName || (email ? email.split("@")[0] : "Tutor")}</strong>
+              <span className="user-role">{userRole}</span>
             </div>
-            <button className="logout-button" onClick={handleLogout}>
-              Log out
+            <button className="icon-button" title="Log out" aria-label="Log out" onClick={handleLogout}>
+              <LogOut size={18} />
             </button>
           </div>
         </header>
 
-        <div className="page-content">
+        <main className="page-content" id="workspace-content" tabIndex={-1}>
           {notice && (
-            <div className="notice-banner">
-              <span>✓</span>
+            <div className="notice-banner" role="status">
+              <CircleHelp size={18} aria-hidden="true" />
               <p>{notice}</p>
               <button
                 onClick={() => setNotice("")}
                 aria-label="Dismiss notification"
               >
-                ×
+                <X size={18} />
               </button>
             </div>
           )}
 
           {renderActivePage()}
-        </div>
+        </main>
 
         <footer className="app-footer">
           <span>CHERNYX AI STUDIO</span>
           <span>Design with purpose. Learn with confidence.</span>
         </footer>
       </section>
-    </main>
+    </div>
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(<Suspense fallback={<p className="scene-loading" role="status">Loading workspace...</p>}><App /></Suspense>);

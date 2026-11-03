@@ -19,6 +19,34 @@ docker compose up -d
 
 The API should be available at `http://localhost:8000/health` and the web application at `http://localhost:5173`.
 
+## Glass UI Preview
+
+With API dependencies installed, run these in separate terminals from the repository root:
+
+```bash
+DATABASE_URL=sqlite:///./chernyx.db AI_PROVIDER=mock python3 -m uvicorn app.main:app --app-dir apps/api --host 127.0.0.1 --port 8000
+```
+
+```bash
+npm --prefix apps/web ci
+npm --prefix apps/web run dev -- --host 127.0.0.1 --port 5173
+```
+
+Open `http://127.0.0.1:5173`. Light/dark theme preferences persist in the browser.
+This preview uses the existing mock AI provider, not live AI generation.
+
+With both services running, the UI smoke test creates its own school and account:
+
+```bash
+cd apps/web
+npx playwright install chromium
+npm run test:ui
+```
+
+The test covers authoring through launch, theme persistence, 320/390/768/1440px layouts,
+scene pixels and controls, and automated light/dark home-screen accessibility checks.
+Set `UI_URL` to test a different web URL. Use a disposable development database for tests.
+
 ## Project Structure
 
 ```text

@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     JSON,
+    String,
 )
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -32,8 +33,14 @@ class ExperienceVersion(Base):
     )
 
     version_number = Column(Integer, nullable=False)
+    state = Column(String(50), nullable=False, default="ready_to_configure")
 
-    configuration_snapshot = Column(JSON, nullable=False)
+    configuration_snapshot = Column(JSON, nullable=False, default=dict)
+    spec = Column(JSON, nullable=True)
+    validation_report = Column(JSON, nullable=True)
+
+    approved_by = Column(UUID(as_uuid=True), ForeignKey("tutors.id"), nullable=True)
+    approved_at = Column(DateTime, nullable=True)
 
     created_at = Column(
         DateTime,

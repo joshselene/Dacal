@@ -38,12 +38,27 @@ def get_or_create_organisation(db: Session, name: str) -> Organisation:
     return org
 
 
+def compute_time_of_day_greeting(local_hour: int | None = None, name: str | None = None) -> str:
+    """Return time-of-day greeting changing at 12:00 and 17:00 local time (FR-01)."""
+    hour = local_hour if local_hour is not None else datetime.now().hour
+    if hour < 12:
+        salutation = "Good morning"
+    elif hour < 17:
+        salutation = "Good afternoon"
+    else:
+        salutation = "Good evening"
+    if name and name.strip():
+        return f"{salutation}, {name.strip()}"
+    return salutation
+
+
 def register_tutor(
     db: Session,
     email: str,
     raw_password: str,
     full_name: str | None,
     organisation_name: str,
+    role: str = "tutor",
 ) -> Tutor:
     """Create a new tutor and (if needed) a new organisation.
     Raises ``ValueError`` if the e‑mail already exists.
@@ -56,6 +71,7 @@ def register_tutor(
         email=email,
         password_hash=pwd_hash,
         full_name=full_name,
+        role=role,
         organisation_id=org.id,
     )
     db.add(tutor)
@@ -79,16 +95,17 @@ def authenticate_tutor(db: Session, email: str, raw_password: str) -> Tutor:
     return tutor
 
 
-
-def build_login_response(tutor: Tutor) -> Mapping[str, Any]:
+def build_login_response(tutor: Tutor, local_hour: int | None = None) -> Mapping[str, Any]:
     """Create JWT access and refresh payloads for the tutor."""
     data = {
         "sub": str(tutor.id),
         "org_id": str(tutor.organisation_id),
+        "role": tutor.role,
     }
 
     access = create_access_token(data)
     refresh = create_refresh_token(data)
+    display_name = tutor.full_name or (tutor.email.split("@")[0] if tutor.email else None)
 
     return {
         "access_token": access["token"],
@@ -96,5 +113,10 @@ def build_login_response(tutor: Tutor) -> Mapping[str, Any]:
         "refresh_token": refresh["token"],
         "refresh_expires_at": refresh["expires_at"],
         "token_type": "bearer",
+        "role": tutor.role,
+        "full_name": tutor.full_name,
+        "email": tutor.email,
+        "organisation_name": tutor.organisation.name if tutor.organisation else None,
+        "greeting": compute_time_of_day_greeting(local_hour, display_name),
     }
 

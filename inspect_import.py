@@ -1,4 +1,7 @@
-import sys, os
-sys.path.append(r'C:/Users/shabi/Downloads/metro-gaming-platform/astra/apps/api')
-from app.main import app
-print('App imported OK')
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "apps", "api"))
+from app.main import app  # noqa: E402, F401
+
+print("App imported OK")

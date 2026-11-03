@@ -13,3 +13,6 @@ build/
 
 # Generated Python package metadata
 *.egg-info/
+*.db
+test-results/
+playwright-report/
