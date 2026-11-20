@@ -485,3 +485,32 @@ def test_at04_at05_at06_at07_full_lifecycle_tenant_isolation_and_notebook_rule()
     assert all_nb_keys.isdisjoint(BANNED_NOTEBOOK_FIELDS), (
         f"NB-02 violation: found banned keys {all_nb_keys & BANNED_NOTEBOOK_FIELDS}"
     )
+
+
+def test_safety_check_endpoint_repairs_faulty_seed():
+    """Verify POST /api/v1/safety-check validates kirana_shop.faulty.json on Attempt 1
+
+    (with R3, R4, R5, R6 failures) and provides a fully valid spec on Attempt 2.
+    """
+    res = client.post("/api/v1/safety-check")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "repaired"
+    assert len(data["attempts"]) == 2
+
+    # Attempt 1: faulty
+    att1 = data["attempts"][0]
+    assert att1["attempt"] == 1
+    assert att1["valid"] is False
+    assert att1["rules_summary"]["R3"] == "error"
+    assert att1["rules_summary"]["R4"] == "error"
+    assert att1["rules_summary"]["R5"] == "error"
+    assert att1["rules_summary"]["R6"] == "error"
+
+    # Attempt 2: repaired & valid
+    att2 = data["attempts"][1]
+    assert att2["attempt"] == 2
+    assert att2["valid"] is True
+    assert all(st == "pass" for k, st in att2["rules_summary"].items() if k != "R3w")
+    assert validate_scene_spec(data["repaired_spec"])["valid"] is True
+

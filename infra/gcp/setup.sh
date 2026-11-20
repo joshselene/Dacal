@@ -37,7 +37,10 @@ put_secret() { printf "%s" "$2" | gcloud secrets create "$1" --data-file=- 2>/de
   || printf "%s" "$2" | gcloud secrets versions add "$1" --data-file=-; }
 put_secret chyron-database-url "postgresql+psycopg2://chyron:${DB_PASSWORD}@/chyron?host=/cloudsql/${CONN}"
 put_secret chyron-jwt-secret "$(openssl rand -hex 32)"
-printf "Paste GEMINI_API_KEY from AI Studio: "; read -rs KEY; echo
+KEY="${GEMINI_API_KEY:-}"
+if [ -z "$KEY" ]; then
+  printf "Paste GEMINI_API_KEY from AI Studio: "; read -rs KEY; echo
+fi
 put_secret gemini-api-key "$KEY"
 
 echo "Setup done. Cloud SQL connection name: ${CONN}"

@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+npm_config_cache=/tmp/.npm-cache npx --yes firebase-tools "$@"

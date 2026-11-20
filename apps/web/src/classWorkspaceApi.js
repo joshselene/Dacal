@@ -230,6 +230,12 @@ export const classWorkspaceApi = {
     });
   },
 
+  async runSafetyCheck() {
+    return request("/safety-check", {
+      method: "POST",
+    });
+  },
+
   async plainLanguageEdit(experienceId, instruction) {
     return request(`/experiences/${experienceId}/edit`, {
       method: "POST",

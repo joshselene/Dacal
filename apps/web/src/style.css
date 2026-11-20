@@ -308,3 +308,145 @@ input[type="checkbox"],input[type="range"] { accent-color: var(--accent); } labe
   .pathway-cards { grid-template-columns: 1fr; } .pathway-card { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 12px; } .pathway-card strong { flex-basis: 100%; }
   .workspace-student-form { align-items: stretch; } .workspace-student-form > input { flex-basis: 100%; } .app-footer { margin: 0 16px; flex-wrap: wrap; }
 }
+
+
+/* Feature 5.1: Repair attempts and R1-R7 chips */
+.repair-attempts-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  margin: 18px 0;
+  text-align: left;
+}
+.repair-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.repair-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+.repair-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+.repair-attempt-card {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  transition: all 0.2s ease;
+}
+.repair-attempt-card.attempt-valid {
+  border-color: var(--success);
+  background: var(--success-bg);
+}
+.repair-attempt-card.attempt-invalid {
+  border-color: var(--danger);
+  background: var(--danger-bg);
+}
+.attempt-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.attempt-number {
+  font-size: 13px;
+  font-weight: 700;
+}
+.attempt-status-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.tag-valid {
+  background: var(--success);
+  color: #fff;
+}
+.tag-invalid {
+  background: var(--danger);
+  color: #fff;
+}
+.r1-r7-chips-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+.m3-rule-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+.m3-chip-pass {
+  background: var(--success-bg);
+  color: var(--success);
+  border-color: rgba(52,199,89,0.3);
+}
+.m3-chip-error {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-color: rgba(255,59,48,0.4);
+}
+.m3-chip-warn {
+  background: var(--warning-bg);
+  color: var(--warning);
+  border-color: rgba(255,159,10,0.3);
+}
+.chip-indicator {
+  font-weight: 700;
+  font-size: 10px;
+}
+.attempt-critique-box {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--surface-strong);
+  font-size: 12px;
+}
+.critique-label {
+  font-weight: 600;
+  color: var(--danger);
+  display: block;
+  margin-bottom: 4px;
+}
+.attempt-critique-box ul {
+  margin: 0;
+  padding-left: 16px;
+}
+.attempt-critique-box li {
+  margin: 3px 0;
+  color: var(--muted);
+}
+.safety-check-action-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.run-safety-btn {
+  font-weight: 600;
+  cursor: pointer;
+}
+.safety-status-note {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}

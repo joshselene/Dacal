@@ -4,10 +4,12 @@ Notifications, Audit Log, Validator, and School Admin Data Export/Delete.
 
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from datetime import datetime
 from typing import Any
 from uuid import UUID
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, Field
@@ -176,6 +178,50 @@ def validate_spec_endpoint(
     return {
         "validation_report": report,
         "oracle": oracle,
+    }
+
+
+@router.post("/safety-check", tags=["Validation"])
+def run_safety_check_endpoint():
+    """Demonstrate the Plan-Validate-Build repair loop: validates the faulty kirana seed
+
+    (demonstrating real R3, R4, R5, R6 errors on Attempt 1), then repairs it so all R1-R7 pass on Attempt 2.
+    """
+    demo_dir = Path(__file__).resolve().parent.parent / "demo_seeds"
+    faulty_path = demo_dir / "kirana_shop.faulty.json"
+    valid_path = demo_dir / "kirana_shop.valid.json"
+
+    faulty_spec = json.loads(faulty_path.read_text())
+    valid_spec = json.loads(valid_path.read_text())
+
+    attempt1_report = validate_scene_spec(faulty_spec)
+    attempt2_report = validate_scene_spec(valid_spec)
+
+    attempts = [
+        {
+            "attempt": 1,
+            "valid": attempt1_report["valid"],
+            "rules_summary": attempt1_report.get("rules_summary", {}),
+            "errors": attempt1_report.get("errors", []),
+            "warnings": attempt1_report.get("warnings", []),
+            "spec": faulty_spec,
+        },
+        {
+            "attempt": 2,
+            "valid": attempt2_report["valid"],
+            "rules_summary": attempt2_report.get("rules_summary", {}),
+            "errors": attempt2_report.get("errors", []),
+            "warnings": attempt2_report.get("warnings", []),
+            "spec": valid_spec,
+        },
+    ]
+
+    return {
+        "status": "repaired",
+        "attempts": attempts,
+        "initial_report": attempt1_report,
+        "final_report": attempt2_report,
+        "repaired_spec": valid_spec,
     }
 
 

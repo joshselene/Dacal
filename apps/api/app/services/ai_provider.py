@@ -317,6 +317,7 @@ def generate_with_repair_loop(
     ai = provider or get_ai_provider()
     critique: list[dict[str, Any]] | None = None
     last_report: dict[str, Any] = {}
+    attempts_history: list[dict[str, Any]] = []
 
     for attempt in range(1, max_retries + 1):
         candidate_spec = ai.plan_scene(
@@ -328,6 +329,14 @@ def generate_with_repair_loop(
         )
         report = validate_scene_spec(candidate_spec, comfort_caps=comfort_caps)
         last_report = report
+        attempts_history.append({
+            "attempt": attempt,
+            "valid": report["valid"],
+            "rules_summary": report.get("rules_summary", {}),
+            "errors": report.get("errors", []),
+            "warnings": report.get("warnings", []),
+            "elapsed_ms": report.get("elapsed_ms", 0),
+        })
 
         if report["valid"]:
             return {
@@ -335,6 +344,7 @@ def generate_with_repair_loop(
                 "spec": candidate_spec,
                 "validation_report": report,
                 "attempts": attempt,
+                "attempts_history": attempts_history,
                 "error_plain": None,
             }
 
@@ -351,5 +361,6 @@ def generate_with_repair_loop(
         "spec": None,
         "validation_report": last_report,
         "attempts": max_retries,
+        "attempts_history": attempts_history,
         "error_plain": plain_message,
     }
