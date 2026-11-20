@@ -49,6 +49,17 @@ class AIProvider:
         raise NotImplementedError
 
 
+def with_preview_images(provider: AIProvider, concepts: list[dict[str, Any]], scenario: str) -> list[dict[str, Any]]:
+    """Attach concept preview images when the provider can draw them (Gemini + Nano Banana); otherwise unchanged."""
+    attach = getattr(provider, "attach_preview_images", None)
+    if not callable(attach):
+        return concepts
+    try:
+        return attach(concepts, scenario)
+    except Exception:  # previews are optional; never block the tutor
+        return concepts
+
+
 class MockAIProvider(AIProvider):
     """Deterministic offline AI provider for tests and local development."""
 

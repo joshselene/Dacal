@@ -9,6 +9,8 @@ Before the 3D room is configured, the tutor sees three quick illustrations of th
 
 ## Already wired
 
+**Implemented (2026-11-21):** `app/services/previews.py` (modes `off`/`inline`/`gcs`, parallel, local cache for `DEMO_MODE=cache`, `gemini_call` logs), `GET /api/v1/previews/{key}.png`, and the concept cards in `main.jsx` (image + "Concept preview" label, 3D fallback). Images are generated only by the concepts endpoints, never on scenario create. The notes below are the original plan.
+
 `GeminiAIProvider._preview_image` adds `preview_image` (a data URL) to each concept when `GEMINI_PREVIEW_IMAGES=inline` and `GEMINI_IMAGE_MODEL` are set. In `main.jsx`, the concept cards (the `threeConcepts` block around "Choose one of three concepts") use CSS art classes (`art-guided` and others). Render `<img src={concept.preview_image}>` when it is present and keep the CSS art as the fallback.
 
 Data URLs are fine for the demo but bloat `scenario.concept_preview` in the database. For production, upload to Cloud Storage and store a URL, using the sketch below.

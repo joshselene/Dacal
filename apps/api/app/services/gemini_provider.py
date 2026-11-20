@@ -29,7 +29,6 @@ scene spec are sent. Never pass learner records to this module.
 
 from __future__ import annotations
 
-import base64
 from copy import deepcopy
 import hashlib
 import json
@@ -40,6 +39,7 @@ import time
 from typing import Any
 
 from .ai_provider import AIProvider, MockAIProvider
+from .previews import attach_previews
 
 log = logging.getLogger("chyron.gemini")
 
@@ -202,33 +202,12 @@ class GeminiAIProvider(AIProvider):
 
         for concept in concepts:
             concept["preview_art"] = PREVIEW_ART.get(concept.get("id"), "art-guided")
-            image = self._preview_image(concept)
-            if image:
-                concept["preview_image"] = image
         return concepts
 
-    def _preview_image(self, concept: dict[str, Any]) -> str | None:
-        """Nano Banana preview as a data URL (demo). Production: upload to Cloud Storage instead."""
-        if not self.image_model or os.getenv("GEMINI_PREVIEW_IMAGES") != "inline":
-            return None
-        try:
-            from google.genai import types
-
-            resp = self.client.models.generate_content(
-                model=self.image_model,
-                contents=(
-                    f"Concept illustration of a calm practice shop: {concept['title']}. {concept['summary']} "
-                    "Soft lighting, uncluttered, low visual noise, no text, no logos, no real faces."
-                ),
-                config=types.GenerateContentConfig(response_modalities=["IMAGE"]),
-            )
-            for part in resp.candidates[0].content.parts:
-                if getattr(part, "inline_data", None):
-                    b64 = base64.b64encode(part.inline_data.data).decode()
-                    return f"data:{part.inline_data.mime_type or 'image/png'};base64,{b64}"
-        except Exception as exc:
-            log.warning("preview image skipped: %s", exc)
-        return None
+    def attach_preview_images(self, concepts: list[dict[str, Any]], scenario: str) -> list[dict[str, Any]]:
+        """Nano Banana previews (see app/services/previews.py). Called by the concepts endpoints only,
+        so creating a scenario never waits on image generation."""
+        return attach_previews(concepts, scenario, lambda: self.client, self.image_model)
 
     # ------------------------------------------------------------------ FR-15 plan + repair
     def plan_scene(

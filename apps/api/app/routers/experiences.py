@@ -37,7 +37,7 @@ from app.schemas.experience import (
     ExperienceUpdate,
     PlainLanguageEditRequest,
 )
-from app.services.ai_provider import generate_with_repair_loop, get_ai_provider
+from app.services.ai_provider import generate_with_repair_loop, get_ai_provider, with_preview_images
 from app.services.validator import get_reference_scene_spec, validate_scene_spec
 
 router = APIRouter()
@@ -274,6 +274,7 @@ def generate_concept_previews(
     experience = get_experience_or_404(db, experience_id, current_tutor)
     provider = get_ai_provider()
     concepts = provider.generate_concepts(experience.prompt, experience.answers)
+    concepts = with_preview_images(provider, concepts, experience.prompt)
     experience.concept_options = concepts
     experience.updated_at = datetime.utcnow()
     db.commit()

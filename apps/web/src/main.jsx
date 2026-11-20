@@ -9,6 +9,23 @@ const FourWallPreview = lazy(() => import("./components/FourWallPreview"));
 const LearnerRoom = lazy(() => import("./components/LearnerRoom"));
 const VoiceIntake = lazy(() => import("./components/VoiceIntake"));
 import { classWorkspaceApi } from "./classWorkspaceApi.js";
+// Preview images are data URLs (inline mode) or API paths (gcs mode) that must hit the API origin.
+function previewImageUrl(value) {
+  if (!value || typeof value !== "string") return null;
+  if (!value.startsWith("/api/")) return value;
+  const base = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api/v1";
+  return new URL(value, new URL(base, window.location.origin)).toString();
+}
+
+// CHYRON logo from public/chyron-logo.png; falls back to the sparkle icon if the file is missing.
+function BrandLogo() {
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className={`brand-logo ${failed ? "" : "has-image"}`}>
+      {failed ? <Sparkles size={24} /> : <img src={`${import.meta.env.BASE_URL}chyron-logo.png`} alt="" onError={() => setFailed(true)} />}
+    </div>
+  );
+}
 const API_URL = `${import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api/v1"}/auth`;
 
 const QUESTIONS = [
@@ -277,6 +294,8 @@ function App() {
   const [answers, setAnswers] = useState({});
   const [customAnswers, setCustomAnswers] = useState({});
   const [concept, setConcept] = useState("guided");
+  const [serverConcepts, setServerConcepts] = useState(null); // Gemini concepts (+ Nano Banana previews when enabled)
+  const [conceptsLoading, setConceptsLoading] = useState(false);
   const [generationStarted, setGenerationStarted] = useState(false);
 
   // Scene spec, validation report, dollhouse & plain-language edit (FR-08, FR-09, FR-14)
@@ -552,6 +571,7 @@ function App() {
     setAnswers({});
     setCustomAnswers({});
     setConcept("guided");
+    setServerConcepts(null);
     setGenerationStarted(false);
     setSceneSpec(DEFAULT_SCENE_SPEC);
     setLastPatchInfo(null);
@@ -562,6 +582,7 @@ function App() {
   }
 
   function openProject(project) {
+    setServerConcepts(Array.isArray(project.concept_options) ? project.concept_options : null);
     setAnswers(project.answers || {});
     setCustomAnswers(project.answers?.notes || {});
     setConfiguration((current) => ({ ...current, ...(project.configuration || {}), budget: project.spec?.task?.budget ?? 500, required: (project.spec?.task?.required || []).join(", ") }));
@@ -676,6 +697,12 @@ function App() {
       } catch {
         // Ignore if already past questions stage
       }
+      // Concepts (and concept preview images) arrive while the tutor reads the brief; cards fill in when ready.
+      setConceptsLoading(true);
+      classWorkspaceApi.generateConcepts(expId)
+        .then((res) => { if (Array.isArray(res?.concepts)) setServerConcepts(res.concepts); })
+        .catch(() => {})
+        .finally(() => setConceptsLoading(false));
     }
     setStage("review");
     setNotice("");
@@ -690,7 +717,8 @@ function App() {
 
     if (expId && typeof expId === "string") {
       try {
-        await classWorkspaceApi.updateConcept(expId, {
+        const chosen = (serverConcepts || []).find((item) => item.id === concept);
+        await classWorkspaceApi.updateConcept(expId, chosen || {
           id: concept,
           title:
             concept === "guided"
@@ -1103,7 +1131,7 @@ function App() {
           {theme === "light" ? <Moon size={19} /> : <Sun size={19} />}
         </button>
         <header className="login-brand">
-          <div className="sidebar-brand"><div className="brand-logo"><Sparkles size={24} /></div><strong>CHYRON</strong></div>
+          <div className="sidebar-brand"><BrandLogo /><strong>CHYRON</strong></div>
           <div><p className="eyebrow">YOUR TEACHING WORKSPACE</p><h1>CHYRON</h1><p>Describe the room.<br />Teach inside it.</p></div>
           <FourWallPreview spec={DEFAULT_SCENE_SPEC} previewOnly />
           <span className="login-brand-footer">Immersive learning, thoughtfully made.</span>
@@ -1643,7 +1671,17 @@ function App() {
         desc: "A quieter setting with fewer distractions and wide, uncluttered walkways.",
         tags: ["Low stimulation", "Reduced density", "Accessible"],
       },
-    ];
+    ].map((item) => {
+      const fromGemini = (serverConcepts || []).find((entry) => entry.id === item.id);
+      if (!fromGemini) return item;
+      return {
+        ...item,
+        title: fromGemini.title || item.title,
+        desc: fromGemini.summary || item.desc,
+        tags: Array.isArray(fromGemini.tags) && fromGemini.tags.length ? fromGemini.tags.slice(0, 3) : item.tags,
+        image: previewImageUrl(fromGemini.preview_image),
+      };
+    });
 
     return (
       <>
@@ -1682,6 +1720,7 @@ function App() {
             <span className="eyebrow">THREE DIRECTIONS</span>
             <h2>Choose one of three concepts to generate</h2>
           </div>
+          {conceptsLoading && <span className="status-pill" role="status">Gemini is drafting concepts…</span>}
         </div>
 
         <div className="concept-grid three-concepts-grid">
@@ -1693,7 +1732,14 @@ function App() {
               onClick={() => setConcept(item.id)}
             >
               <div className={`concept-art ${item.artClass}`}>
-                <FourWallPreview spec={DEFAULT_SCENE_SPEC} previewOnly />
+                {item.image ? (
+                  <>
+                    <img className="concept-preview-image" src={item.image} alt={`Concept preview: ${item.title}`} loading="lazy" />
+                    <span className="concept-preview-label">Concept preview</span>
+                  </>
+                ) : (
+                  <FourWallPreview spec={DEFAULT_SCENE_SPEC} previewOnly />
+                )}
               </div>
               <div className="concept-content">
                 <div className="concept-title">
@@ -3418,7 +3464,7 @@ function App() {
       <a className="skip-link" href="#workspace-content">Skip to content</a>
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <div className="brand-logo"><Sparkles size={23} /></div>
+          <BrandLogo />
           <div>
             <strong>CHYRON</strong>
             <small>Practice studio</small>

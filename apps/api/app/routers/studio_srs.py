@@ -11,7 +11,7 @@ from typing import Any
 from uuid import UUID
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, Response, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -36,7 +36,8 @@ from app.routers.experiences import (
     get_experience_or_404,
 )
 from app.schemas.class_workspace import ModuleResponse
-from app.services.ai_provider import generate_with_repair_loop, get_ai_provider
+from app.services.ai_provider import generate_with_repair_loop, get_ai_provider, with_preview_images
+from app.services.previews import read_stored
 from app.services.validator import (
     compile_pathway_config,
     get_reference_scene_spec,
@@ -298,6 +299,7 @@ def get_scenario_concepts(
     scenario = get_experience_or_404(db, scenario_id, tutor)
     provider = get_ai_provider()
     concepts = provider.generate_concepts(scenario.prompt, scenario.answers)
+    concepts = with_preview_images(provider, concepts, scenario.prompt)
     scenario.concept_options = concepts
     if not scenario.concept_preview and concepts:
         scenario.concept_preview = concepts[0]
@@ -306,6 +308,16 @@ def get_scenario_concepts(
     scenario.updated_at = datetime.utcnow()
     db.commit()
     return {"scenario_id": str(scenario.id), "concepts": concepts, "status": scenario.status}
+
+
+@router.get("/previews/{key}.png", tags=["Scenarios"], include_in_schema=False)
+def get_preview_image(key: str) -> Response:
+    """Nano Banana concept preview (gcs mode). Unauthenticated so <img> tags work: keys are 128-bit hashes and
+    the images are generic shop illustrations built from concept text, never learner data."""
+    data = read_stored(key)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Preview not found")
+    return Response(content=data, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.post("/scenarios/{scenario_id}/generate", tags=["Scenarios"])
