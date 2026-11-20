@@ -500,10 +500,15 @@ def test_safety_check_endpoint_repairs_faulty_seed():
 
     (with R3, R4, R5, R6 failures) and provides a fully valid spec on Attempt 2.
     """
-    res = client.post("/api/v1/safety-check")
+    assert client.post("/api/v1/safety-check").status_code == 401  # costs model tokens: tutors only
+    suffix = os.urandom(4).hex()
+    reg = client.post("/api/v1/auth/register", json={
+        "email": f"safety_{suffix}@school.org", "password": "SafePassword123!", "full_name": "Safety Tutor",
+        "organisation_name": f"Safety School {suffix}", "role": "tutor", "local_hour": 10})
+    res = client.post("/api/v1/safety-check", headers={"Authorization": f"Bearer {reg.json()['access_token']}"})
     assert res.status_code == 200
     data = res.json()
-    assert data["status"] == "repaired"
+    assert data["status"] == "repaired" and data["provider"] == "mock" and data["repairs"] == 1
     assert len(data["attempts"]) == 2
 
     # Attempt 1: faulty

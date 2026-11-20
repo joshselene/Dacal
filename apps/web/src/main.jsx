@@ -736,21 +736,22 @@ function App() {
 
   async function handleRunSafetyCheck() {
     setIsRunningSafetyCheck(true);
-    setSafetyCheckStatus("Validating faulty kirana seed (kirana_shop.faulty.json)...");
+    setSafetyCheckStatus("Validating a faulty kirana shop, then sending the rule failures to Gemini for repair…");
     try {
       const res = await classWorkspaceApi.runSafetyCheck();
       if (res.attempts && res.attempts.length > 0) {
-        // Step 1: Render Attempt 1 showing the real rule failures (R3, R4, R5, R6 in red)
+        // Replay the real result: attempt 1 (the faulty input) first, then each model repair.
+        const failed = Object.entries(res.attempts[0].rules_summary || {}).filter(([, v]) => v === "error").map(([k]) => k);
+        const model = res.provider === "gemini" ? "Gemini" : res.provider;
         setRepairAttempts([res.attempts[0]]);
-        setSafetyCheckStatus(
-          "Attempt 1: Safety violations detected (R3 reachability, R4 budget, R5 caps, R6 monotone). Sending validator critique into Gemini repair loop..."
-        );
+        setSafetyCheckStatus(`Attempt 1: ${failed.join(", ")} failed. Validator critique sent to ${model} for repair…`);
 
         setTimeout(() => {
-          // Step 2: Render Attempt 2 showing repaired scene (all 7 rules in green)
           setRepairAttempts(res.attempts);
           setSafetyCheckStatus(
-            "Attempt 2: Repair successful! All R1–R7 rules passed. Repaired scene is ready."
+            res.status === "repaired"
+              ? `Repaired by ${model} in ${res.repairs} ${res.repairs === 1 ? "attempt" : "attempts"}. All R1–R7 rules pass.`
+              : `${model} could not repair it within ${res.repairs} attempts, so nothing is built. The rules decide.`
           );
           if (res.repaired_spec) {
             setSceneSpec(res.repaired_spec);

@@ -36,7 +36,7 @@ from app.routers.experiences import (
     get_experience_or_404,
 )
 from app.schemas.class_workspace import ModuleResponse
-from app.services.ai_provider import generate_with_repair_loop, get_ai_provider, with_preview_images
+from app.services.ai_provider import generate_with_repair_loop, get_ai_provider, repair_existing_spec, with_preview_images
 from app.services.previews import read_stored
 from app.services.validator import (
     compile_pathway_config,
@@ -182,47 +182,25 @@ def validate_spec_endpoint(
     }
 
 
+SAFETY_CHECK_PROMPT = "A learner buys milk and bread at a kirana shop with 200 rupees and pays at the counter."
+
+
 @router.post("/safety-check", tags=["Validation"])
-def run_safety_check_endpoint():
-    """Demonstrate the Plan-Validate-Build repair loop: validates the faulty kirana seed
-
-    (demonstrating real R3, R4, R5, R6 errors on Attempt 1), then repairs it so all R1-R7 pass on Attempt 2.
-    """
+def run_safety_check_endpoint(tutor: Tutor = Depends(get_current_tutor)):
+    """Live Plan-Validate-Build demo: validate the faulty kirana seed (R3, R4, R5, R6 fail), then send it with
+    the validator critique to the configured model for repair (at most 3 repairs), re-validating each attempt.
+    Nothing is substituted: if the model cannot repair it, the response says so."""
     demo_dir = Path(__file__).resolve().parent.parent / "demo_seeds"
-    faulty_path = demo_dir / "kirana_shop.faulty.json"
-    valid_path = demo_dir / "kirana_shop.valid.json"
-
-    faulty_spec = json.loads(faulty_path.read_text())
-    valid_spec = json.loads(valid_path.read_text())
-
-    attempt1_report = validate_scene_spec(faulty_spec)
-    attempt2_report = validate_scene_spec(valid_spec)
-
-    attempts = [
-        {
-            "attempt": 1,
-            "valid": attempt1_report["valid"],
-            "rules_summary": attempt1_report.get("rules_summary", {}),
-            "errors": attempt1_report.get("errors", []),
-            "warnings": attempt1_report.get("warnings", []),
-            "spec": faulty_spec,
-        },
-        {
-            "attempt": 2,
-            "valid": attempt2_report["valid"],
-            "rules_summary": attempt2_report.get("rules_summary", {}),
-            "errors": attempt2_report.get("errors", []),
-            "warnings": attempt2_report.get("warnings", []),
-            "spec": valid_spec,
-        },
-    ]
-
+    faulty_spec = json.loads((demo_dir / "kirana_shop.faulty.json").read_text())
+    result = repair_existing_spec(faulty_spec, SAFETY_CHECK_PROMPT, provider=get_ai_provider(), max_repairs=3)
     return {
-        "status": "repaired",
-        "attempts": attempts,
-        "initial_report": attempt1_report,
-        "final_report": attempt2_report,
-        "repaired_spec": valid_spec,
+        "status": "repaired" if result["valid"] else "not_repaired",
+        "provider": result["provider"],
+        "repairs": result["repairs"],
+        "attempts": result["attempts"],
+        "initial_report": result["attempts"][0],
+        "final_report": result["final_report"],
+        "repaired_spec": result["spec"],
     }
 
 

@@ -297,6 +297,39 @@ def get_ai_provider(mode: str | None = None) -> AIProvider:
     return MockAIProvider()
 
 
+def repair_existing_spec(
+    spec: dict[str, Any],
+    prompt: str,
+    provider: AIProvider | None = None,
+    max_repairs: int = 3,
+    comfort_caps: dict[str, dict[str, int]] | None = None,
+) -> dict[str, Any]:
+    """Validate an existing spec; if it fails, send it with the validator critique to the model for repair.
+
+    Attempt 1 is the given spec. Up to `max_repairs` model repairs follow, each re-validated against R1-R7.
+    The validator decides: a repair that still fails is reported, never swapped for a stored answer.
+    """
+    ai = provider or get_ai_provider()
+    current = deepcopy(spec)
+    report = validate_scene_spec(current, comfort_caps=comfort_caps)
+    attempts = [{"attempt": 1, "source": "input", "valid": report["valid"], "rules_summary": report.get("rules_summary", {}),
+                 "errors": report.get("errors", []), "warnings": report.get("warnings", []), "spec": current}]
+    repairs = 0
+    while not report["valid"] and repairs < max_repairs:
+        repairs += 1
+        if hasattr(ai, "_last_spec"):
+            ai._last_spec = deepcopy(current)  # repair this spec, not a fresh plan
+        candidate = ai.plan_scene(prompt=prompt, critique=report["errors"], attempt=repairs + 1)
+        report = validate_scene_spec(candidate, comfort_caps=comfort_caps)
+        attempts.append({"attempt": repairs + 1, "source": ai.name, "valid": report["valid"],
+                         "rules_summary": report.get("rules_summary", {}), "errors": report.get("errors", []),
+                         "warnings": report.get("warnings", []), "spec": candidate})
+        if isinstance(candidate, dict) and "_error" not in candidate:
+            current = candidate
+    return {"valid": report["valid"], "attempts": attempts, "repairs": repairs, "provider": ai.name,
+            "spec": current if report["valid"] else None, "final_report": report}
+
+
 def generate_with_repair_loop(
     prompt: str,
     answers: dict[str, Any] | None = None,
