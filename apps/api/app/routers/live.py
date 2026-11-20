@@ -30,7 +30,10 @@ def _genai_client():
     if _client is None:
         from google import genai
 
-        _client = genai.Client(http_options={"api_version": "v1beta"})
+        # Always the Gemini API with the server key (ephemeral tokens are not a Vertex AI feature),
+        # even when the planner runs on Vertex AI via GOOGLE_GENAI_USE_VERTEXAI.
+        key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        _client = genai.Client(vertexai=False, api_key=key, http_options={"api_version": "v1beta"})
     return _client
 
 
