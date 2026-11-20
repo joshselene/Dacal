@@ -2,10 +2,66 @@ import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Hand, Pause, RotateCcw } from "lucide-react";
+
+const CUE_ICONS = { forward: ArrowUp, right: ArrowRight, around: ArrowDown, left: ArrowLeft, here: Hand };
 import "./FourWallPreview.css";
 
 const DIRECTIONS = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };
 const WALLS = Object.keys(DIRECTIONS);
+const ARROW_YAW = { N: 0, W: Math.PI / 2, S: Math.PI, E: -Math.PI / 2 };
+const GUIDE_COLOR = "#14b8b0";
+const MAX_ARROWS = 6;
+
+// Pathway guidance meshes: built once per scene, then shown, moved and pulsed each frame.
+function buildGuide(scene, spec) {
+  const glow = new THREE.MeshBasicMaterial({ color: GUIDE_COLOR, transparent: true, opacity: .22, depthWrite: false });
+  const pad = new THREE.MeshBasicMaterial({ color: GUIDE_COLOR, transparent: true, opacity: .45, depthWrite: false });
+  const solid = new THREE.MeshBasicMaterial({ color: "#0a7f7a" });
+  const shell = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), glow);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), pad);
+  floor.rotation.x = -Math.PI / 2;
+  const marker = new THREE.Mesh(new THREE.ConeGeometry(.2, .42, 18), solid);
+  marker.rotation.x = Math.PI;
+  const shape = new THREE.Shape();
+  [[0, .34], [.28, -.02], [.11, -.02], [.11, -.32], [-.11, -.32], [-.11, -.02], [-.28, -.02]]
+    .forEach(([x, y], index) => (index ? shape.lineTo(x, y) : shape.moveTo(x, y)));
+  const arrowGeometry = new THREE.ShapeGeometry(shape);
+  const arrows = Array.from({ length: MAX_ARROWS }, () => {
+    const holder = new THREE.Group();
+    const mesh = new THREE.Mesh(arrowGeometry, solid);
+    mesh.rotation.x = -Math.PI / 2;
+    holder.add(mesh); holder.visible = false; scene.add(holder);
+    return holder;
+  });
+  [shell, floor, marker].forEach((mesh) => { mesh.visible = false; mesh.renderOrder = 2; scene.add(mesh); });
+  const boxes = new Map(spec.layout.map((object) => [object.id, {
+    x: object.cell[0] + object.size[0] / 2, z: object.cell[1] + object.size[1] / 2,
+    w: object.size[0], d: object.size[1], h: ["shelf", "fridge"].includes(object.asset) ? 2.1 : 1.3,
+  }]));
+  return { glow, shell, floor, marker, arrows, boxes };
+}
+
+function updateGuide(guide, guidance, clock, still) {
+  const target = guidance?.targetId ? guide.boxes.get(guidance.targetId) : null;
+  const showTarget = Boolean(target) && guidance.level !== "none";
+  [guide.shell, guide.floor, guide.marker].forEach((mesh) => { mesh.visible = showTarget; });
+  if (showTarget) {
+    guide.shell.scale.set(target.w + .14, target.h, target.d + .14);
+    guide.shell.position.set(target.x, target.h / 2, target.z);
+    guide.floor.scale.set(target.w + .5, target.d + .5, 1);
+    guide.floor.position.set(target.x, .035, target.z);
+    guide.marker.position.set(target.x, target.h + .45 + (still ? 0 : Math.sin(clock * 2.2) * .08), target.z);
+    guide.glow.opacity = still ? .22 : .16 + (Math.sin(clock * 2.2) + 1) * .06;
+  }
+  const steps = guidance?.level === "full" ? guidance.arrows || [] : [];
+  guide.arrows.forEach((holder, index) => {
+    const step = steps[index];
+    holder.visible = Boolean(step);
+    if (!step) return;
+    holder.position.set(step.x + .5, .045, step.y + .5);
+    holder.rotation.y = ARROW_YAW[step.dir] ?? 0;
+  });
+}
 
 function buildScene(spec) {
   const scene = new THREE.Scene();
@@ -116,13 +172,13 @@ function buildScene(spec) {
       if (!occupied(column, row)) shoppers.push(person([column + .5, 0, row + .5], palette[shoppers.length % palette.length]));
     }
   }
-  return { scene, rearWalls, shoppers, selectable };
+  return { scene, rearWalls, shoppers, selectable, guide: buildGuide(scene, spec) };
 }
 
-export default function FourWallPreview({ spec, pathway = "B", displayMode = "overview", learnerPosition = null, onMove, onSelect, onPause, interactiveKeyboard = false, previewOnly = false, onObjectSelect, paused = false }) {
+export default function FourWallPreview({ spec, pathway = "B", displayMode = "overview", learnerPosition = null, onMove, onSelect, onPause, interactiveKeyboard = false, previewOnly = false, onObjectSelect, paused = false, guidance = null, controlsExtra = null }) {
   const hostRef = useRef(null);
   const canvasRef = useRef(null);
-  const liveRef = useRef({ learnerPosition, pathway, paused });
+  const liveRef = useRef({ learnerPosition, pathway, paused, guidance });
   const controlsRef = useRef(null);
   const [view, setView] = useState(displayMode);
   const [failure, setFailure] = useState("");
@@ -130,7 +186,7 @@ export default function FourWallPreview({ spec, pathway = "B", displayMode = "ov
   const wall = WALLS.includes(requestedWall) ? requestedWall : null;
   const mode = wall && interactiveKeyboard ? wall : view;
 
-  useEffect(() => { liveRef.current = { learnerPosition, pathway, paused }; }, [learnerPosition, pathway, paused]);
+  useEffect(() => { liveRef.current = { learnerPosition, pathway, paused, guidance }; }, [learnerPosition, pathway, paused, guidance]);
   useEffect(() => { setView(displayMode); }, [displayMode]);
   useEffect(() => {
     if (!spec?.room || !spec?.layout) return;
@@ -199,6 +255,7 @@ export default function FourWallPreview({ spec, pathway = "B", displayMode = "ov
         shopper.rotation.y = Math.sin(clock * .5 + index) * .25;
       });
       store.rearWalls.forEach((object) => { object.visible = mode !== "overview"; });
+      updateGuide(store.guide, live.guidance, clock, reducedMotion.matches);
       const width = host.clientWidth; const height = host.clientHeight;
       renderer.setScissorTest(false); renderer.clear();
       if (mode === "overview") { controls.update(); renderer.setViewport(0, 0, width, height); renderer.render(store.scene, camera); return; }
@@ -211,7 +268,7 @@ export default function FourWallPreview({ spec, pathway = "B", displayMode = "ov
         camera.fov = 70; camera.aspect = viewWidth / viewHeight; camera.updateProjectionMatrix();
         camera.position.set(position.x + .5, 1.45, position.y + .5);
         const delta = DIRECTIONS[direction] || DIRECTIONS.N;
-        camera.lookAt(position.x + .5 + delta[0], 1.45, position.y + .5 + delta[1]);
+        camera.lookAt(position.x + .5 + delta[0], 1.25, position.y + .5 + delta[1]); // slight downward tilt shows floor arrows
         renderer.setViewport(index % columns * viewWidth, height - (Math.floor(index / columns) + 1) * viewHeight, viewWidth, viewHeight);
         renderer.setScissor(index % columns * viewWidth + 1, height - (Math.floor(index / columns) + 1) * viewHeight + 1, viewWidth - 2, viewHeight - 2);
         renderer.render(store.scene, camera);
@@ -258,12 +315,17 @@ export default function FourWallPreview({ spec, pathway = "B", displayMode = "ov
           {labels.map((name) => <span key={name}>{name}</span>)}
         </div>}
         {(failure || !spec) && <p className="scene-failure" role="status">{failure || "No scene available."}</p>}
+        {guidance?.level === "full" && guidance.text && !paused && (() => {
+          const CueIcon = CUE_ICONS[guidance.cue];
+          return <p className="scene-guidance" role="status" aria-live="polite">{CueIcon && <CueIcon size={26} aria-hidden="true" />}<span>{guidance.text}</span></p>;
+        })()}
         {paused && <div className="scene-paused"><Pause size={24} /><strong>Paused</strong></div>}
       </div>
       {interactiveKeyboard && <div className="runtime-key-controls" aria-label="Learner controls">
-        {[["W", ArrowLeft], ["N", ArrowUp], ["S", ArrowDown], ["E", ArrowRight]].map(([direction, Icon]) => <button key={direction} type="button" className="icon-button" title={`Move ${direction}`} aria-label={`Move ${direction}`} disabled={paused} onClick={() => onMove?.(direction)}><Icon size={18} /></button>)}
-        <button type="button" className="icon-button" title="Select item" aria-label="Select item" onClick={onSelect}><Hand size={18} /></button>
-        <button type="button" className="icon-button" title={paused ? "Resume" : "Pause"} aria-label={paused ? "Resume" : "Pause"} onClick={onPause}><Pause size={18} /></button>
+        {[["W", ArrowLeft], ["N", ArrowUp], ["S", ArrowDown], ["E", ArrowRight]].map(([direction, Icon]) => <button key={direction} type="button" className="icon-button" title={`Move ${direction}`} aria-label={`Move ${direction}`} disabled={paused} onClick={() => onMove?.(direction)}><Icon size={28} /></button>)}
+        <button type="button" className="icon-button" title="Select item" aria-label="Select item" onClick={onSelect}><Hand size={28} /></button>
+        <button type="button" className="icon-button" title={paused ? "Resume" : "Pause"} aria-label={paused ? "Resume" : "Pause"} onClick={onPause}><Pause size={28} /></button>
+        {controlsExtra}
       </div>}
     </section>
   );

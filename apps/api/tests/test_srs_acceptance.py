@@ -444,14 +444,22 @@ def test_at04_at05_at06_at07_full_lifecycle_tenant_isolation_and_notebook_rule()
         {"command": "move", "payload": {"dir": "N"}},
         {"command": "prompt", "payload": {"message": "Look at shelf 1 for milk"}},
         {"command": "simplify", "payload": {}},
+        {"command": "set_pathway", "payload": {"pathway": "A"}},
+        {"command": "set_pathway", "payload": {"pathway": "B"}},
         {"command": "select", "payload": {"sku": "milk"}},
         {"command": "select", "payload": {"checkout": True}},
     ]:
         cmd_res = client.post(f"/api/v1/runs/{run_id}/command", json=cmd_payload, headers=headers_a)
         assert cmd_res.status_code == 200
 
+    bad = client.post(
+        f"/api/v1/runs/{run_id}/command", json={"command": "set_pathway", "payload": {"pathway": "Z"}}, headers=headers_a
+    )
+    assert bad.status_code == 422
+
     final_run = cmd_res.json()
     assert final_run["pathway"] == "B"
+    assert final_run["compiled_config"]["volume"] <= 60  # pathway B comfort cap
     assert final_run["prompts_given"] == 1
     assert final_run["status"] == "completed"
 

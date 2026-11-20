@@ -93,7 +93,7 @@ class RunCreateRequest(BaseModel):
 class RunCommandRequest(BaseModel):
     command: str = Field(
         ...,
-        description="Command: pause, resume, simplify, prompt, what_if, move, select, step_complete, end",
+        description="Command: pause, resume, simplify, set_pathway, prompt, what_if, move, select, step_complete, end",
     )
     payload: dict[str, Any] = Field(default_factory=dict)
 
@@ -876,9 +876,15 @@ def _apply_command_to_run(
         run.tutor_decisions += 1
         action_note = "Session resumed"
 
-    elif command == "simplify":
-        # Step support pathway toward higher support (C -> B -> A) (FR-16, RT-06)
-        next_pathway = "B" if run.pathway == "C" else "A"
+    elif command in ("simplify", "set_pathway"):
+        # simplify steps toward more support (C -> B -> A); set_pathway jumps to A, B or C (FR-16, RT-06).
+        # Either way the config is recompiled from the run's approved, validated version spec.
+        if command == "simplify":
+            next_pathway = "B" if run.pathway == "C" else "A"
+        else:
+            next_pathway = str(payload.get("pathway", "")).upper()
+            if next_pathway not in ("A", "B", "C"):
+                raise HTTPException(status_code=422, detail="pathway must be A, B or C")
         run.pathway = next_pathway
         full_spec = get_reference_scene_spec()
         ver = db.query(ExperienceVersion).filter(ExperienceVersion.id == run.version_id).first()
@@ -928,12 +934,15 @@ def _apply_command_to_run(
         requested_sku = payload.get("sku")
         picked = None
         checked_out = False
+        required_skus = set((spec.get("task") or {}).get("required") or [])
 
         for obj in adj_objs:
             if obj.get("asset") == "counter" or obj.get("id") == "counter":
                 checked_out = True
                 break
-            for item in obj.get("items") or []:
+            # Without an explicit SKU, a hand press picks a still-needed required item before anything else.
+            shelf_items = sorted(obj.get("items") or [], key=lambda it: it.get("sku") not in required_skus)
+            for item in shelf_items:
                 if requested_sku and item.get("sku") == requested_sku:
                     picked = item
                     break

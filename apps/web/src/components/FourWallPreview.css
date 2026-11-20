@@ -23,3 +23,9 @@
   .scene-viewport.multi-view { aspect-ratio: 1.2; }
   .scene-toolbar { flex-wrap: wrap; }
 }
+/* Pathway guidance text (pathway A) and large learner controls (>= 72 px targets). */
+.scene-guidance { display: flex; align-items: center; gap: 10px; position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); max-width: calc(100% - 28px); margin: 0; padding: 10px 18px; border-radius: 999px; background: var(--md-sys-color-inverse-surface); color: var(--md-sys-color-inverse-on-surface); font-size: 16px; font-weight: 500; line-height: 1.35; text-align: center; box-shadow: var(--md-sys-elevation-2); pointer-events: none; }
+.runtime-key-controls { gap: 12px; }
+.runtime-key-controls .icon-button { width: 72px; height: 72px; flex: 0 0 72px; border-radius: var(--md-sys-shape-corner-large); background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); border-color: transparent; }
+.runtime-key-controls .icon-button:hover:not(:disabled) { background: color-mix(in srgb, var(--md-sys-color-secondary-container), var(--md-sys-color-on-secondary-container) 8%); }
+.runtime-key-controls .icon-button[aria-pressed="true"] { background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }

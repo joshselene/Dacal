@@ -4,7 +4,9 @@ import { createRoot } from "react-dom/client";
 import axios from "axios";
 import { Bell, BookOpen, CircleHelp, Clock3, FolderOpen, House, LayoutGrid, LogOut, Moon, Plus, Sparkles, Sun, X } from "lucide-react";
 import "./style.css";
+import { guidanceFor, roomSpecFor } from "./components/roomGuidance";
 const FourWallPreview = lazy(() => import("./components/FourWallPreview"));
+const LearnerRoom = lazy(() => import("./components/LearnerRoom"));
 import { classWorkspaceApi } from "./classWorkspaceApi.js";
 const API_URL = `${import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api/v1"}/auth`;
 
@@ -970,6 +972,10 @@ function App() {
         next.tutor_decisions += 1;
       } else if (command === "resume") {
         next.status = "running";
+        next.tutor_decisions += 1;
+      } else if (command === "set_pathway" && ["A", "B", "C"].includes(payload.pathway)) {
+        next.pathway = payload.pathway;
+        setActivePathway(next.pathway);
         next.tutor_decisions += 1;
       } else if (command === "simplify") {
         next.pathway = prev.pathway === "C" ? "B" : "A";
@@ -2246,20 +2252,7 @@ function App() {
 
         <div className="runtime-layout">
           <section>
-            <FourWallPreview
-              environment={configuration.environment}
-              spec={sceneSpec}
-              pathway={run.pathway}
-              displayMode={run.mode}
-              paused={run.status === "paused"}
-              learnerPosition={run.learner_position}
-              interactiveKeyboard={run.status !== "completed"}
-              onMove={(dir) => handleConsoleCommand("move", { dir })}
-              onSelect={() => handleConsoleCommand("select", {})}
-              onPause={() =>
-                handleConsoleCommand(run.status === "paused" ? "resume" : "pause")
-              }
-            />
+            <LearnerRoom spec={sceneSpec} run={run} onCommand={handleConsoleCommand} />
           </section>
 
           <aside className="content-card tutor-console-card">
@@ -2340,6 +2333,18 @@ function App() {
               </p>
             )}
 
+            <div className="console-pathway" role="group" aria-label="Support pathway">
+              <span className="mini-label">SUPPORT PATHWAY</span>
+              <div className="segmented-buttons">
+                {[["A", "A · most support"], ["B", "B · some support"], ["C", "C · least support"]].map(([key, label]) => (
+                  <button key={key} type="button" aria-pressed={run.pathway === key}
+                    onClick={() => run.pathway !== key && handleConsoleCommand("set_pathway", { pathway: key })}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="console-actions-grid">
               <button
                 type="button"
@@ -2353,6 +2358,7 @@ function App() {
               <button
                 type="button"
                 className="secondary-button"
+                disabled={run.pathway === "A"}
                 onClick={() => handleConsoleCommand("simplify")}
               >
                 ↓ Simplify Pathway ({run.pathway} → {run.pathway === "C" ? "B" : "A"})
@@ -2362,7 +2368,7 @@ function App() {
                 className="secondary-button"
                 onClick={() =>
                   handleConsoleCommand("prompt", {
-                    message: "Look for the next item on Shelf 1",
+                    message: guidanceFor(roomSpecFor(sceneSpec, run), run, run.pathway).text,
                   })
                 }
               >
