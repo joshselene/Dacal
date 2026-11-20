@@ -6,7 +6,7 @@ Implements:
   (median patch < 10% of spec bytes), never a full regeneration.
 - FR-15 & LC-3: Bounded repair loop (up to k=3 retries with validator critique),
   returning a plain-language failure message if all attempts fail.
-- FR-18: Pluggable AI provider interface with Claude as default and deterministic
+- FR-18: Pluggable AI provider interface: Google Gemini in production, deterministic
   mock for offline testing.
 - SEC-04 & SEC-05: AI prompts contain no learner personal data; AI output is
   untrusted input validated against R1–R7.
@@ -288,23 +288,12 @@ class MockAIProvider(AIProvider):
         }
 
 
-class ClaudeAIProvider(MockAIProvider):
-    """Claude AI provider with deterministic fallback when offline (FR-18)."""
-
-    name: str = "claude"
-
-    def __init__(self, api_key: str | None = None):
-        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
-
-
 def get_ai_provider(mode: str | None = None) -> AIProvider:
     provider_mode = (mode or os.getenv("AI_PROVIDER", "mock")).lower()
     if provider_mode == "gemini":
         from .gemini_provider import GeminiAIProvider  # local import avoids a cycle
 
         return GeminiAIProvider()
-    if provider_mode == "claude":
-        return ClaudeAIProvider()
     return MockAIProvider()
 
 

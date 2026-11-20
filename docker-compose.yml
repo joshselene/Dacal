@@ -1,3 +1,4 @@
+# Local development only. Production runs on Google Cloud: Cloud Run + Cloud SQL (PostgreSQL) + Cloud Storage.
 version: '3.9'
 services:
   postgres:
@@ -16,33 +17,6 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  minio:
-    image: minio/minio:RELEASE.2024-07-30T04-41-39Z
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - miniodata:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/ready"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   api:
     build:
       context: ./apps/api
@@ -50,15 +24,10 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg2://postgres:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
         condition: service_healthy
 
   web:
@@ -73,4 +42,3 @@ services:
 
 volumes:
   pgdata:
-  miniodata:

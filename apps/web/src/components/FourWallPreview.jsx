@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Hand, Pause, RotateCcw } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Hand, Pause, RotateCcw } from "../m3/icons.jsx";
 
 const CUE_ICONS = { forward: ArrowUp, right: ArrowRight, around: ArrowDown, left: ArrowLeft, here: Hand };
 import "./FourWallPreview.css";

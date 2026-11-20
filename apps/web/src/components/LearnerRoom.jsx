@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Volume2, VolumeX } from "lucide-react";
+import { Volume2, VolumeX } from "../m3/icons.jsx";
 import FourWallPreview from "./FourWallPreview";
 import { guidanceFor, roomSpecFor } from "./roomGuidance";
 

@@ -2,7 +2,7 @@
 import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import axios from "axios";
-import { Bell, BookOpen, CircleHelp, Clock3, FolderOpen, House, LayoutGrid, LogOut, Moon, Plus, Sparkles, Sun, X } from "lucide-react";
+import { Bell, BookOpen, CircleHelp, Clock3, FolderOpen, House, LayoutGrid, LogOut, Moon, Plus, Sparkles, Sun, X } from "./m3/icons.jsx";
 import "./style.css";
 import { guidanceFor, roomSpecFor } from "./components/roomGuidance";
 const FourWallPreview = lazy(() => import("./components/FourWallPreview"));

@@ -18,10 +18,9 @@ Read this file first. Each part of the build has a skill under `.agents/skills/`
 | `apps/api/tests/` | `test_srs_acceptance.py` (AT-01..07) and `test_gemini_provider.py` (offline fake) | 13 tests pass |
 | `apps/web/` | React 18 + Vite (JSX), Three.js, axios, lucide; `main.jsx` is about 3,400 lines | Main front end |
 | `apps/web/src/components/FourWallPreview.jsx` | Three.js room in five modes: overview, laptop, room (four walls), 2×2, single wall (`?wall=N`) | Keep |
-| `apps/web/src/style.css` | Apple-style glass tokens | **Redesign to Material 3** |
+| `apps/web/src/style.css` + `m3-tokens.css` | Material 3 tokens from seed #006A6A | Done |
 | `apps/web/tests/ui.spec.js` | Playwright plus axe accessibility checks at 320, 390, 768 and 1440 px | Keep it passing |
-| `src/`, root `package.json` | An older Express/Sequelize prototype | Legacy. Do not extend; delete when convenient |
-| `docker-compose.yml` | Postgres, Redis, MinIO | Local only. The API doesn't use Redis or MinIO |
+| `docker-compose.yml` | Local Postgres (stand-in for Cloud SQL), API, web | Local only |
 | `infra/gcp/`, `firebase.json` | Cloud Run, Cloud SQL and Firebase Hosting scripts | New |
 
 ## The one idea that must never break: Plan → Validate → Build
