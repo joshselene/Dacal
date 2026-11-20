@@ -77,6 +77,25 @@ def test_network_error_is_recorded_not_hidden(tmp_path, monkeypatch):
     provider, _ = provider_with([RuntimeError("quota")] * 3, tmp_path, monkeypatch)
     result = generate_with_repair_loop("Anything", provider=provider)
     assert result["success"] is False  # never silently swaps in the mock scene
+    assert "could not reach the scene planner" in result["error_plain"]
+
+
+def test_failed_call_replans_from_tutor_description(tmp_path, monkeypatch):
+    # Regression: after a 429 the next attempt used to "repair" the error stub without the tutor's
+    # description, so Gemini invented an unrelated shop that still passed R1-R7.
+    provider, models = provider_with([RuntimeError("429 RESOURCE_EXHAUSTED"), get_reference_scene_spec()],
+                                     tmp_path, monkeypatch)
+    result = generate_with_repair_loop("Buy milk and bread at a kirana shop with 200 rupees", provider=provider)
+    assert result["success"] is True and result["attempts"] == 2
+    second = models.calls[1]["contents"]
+    assert "Tutor description: Buy milk and bread at a kirana shop with 200 rupees" in second
+    assert "_error" not in second  # re-planned, not a repair of the error stub
+
+
+def test_repair_prompt_keeps_tutor_description(tmp_path, monkeypatch):
+    provider, models = provider_with([broken_spec(), get_reference_scene_spec()], tmp_path, monkeypatch)
+    generate_with_repair_loop("Buy milk and bread at a kirana shop", provider=provider)
+    assert "Buy milk and bread at a kirana shop" in models.calls[1]["contents"]
 
 
 def test_demo_cache_replays_without_network(tmp_path, monkeypatch):

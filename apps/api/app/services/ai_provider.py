@@ -330,6 +330,7 @@ def generate_with_repair_loop(
     last_report: dict[str, Any] = {}
     attempts_history: list[dict[str, Any]] = []
 
+    unreachable = 0  # attempts where the model could not be called (quota, network)
     for attempt in range(1, max_retries + 1):
         candidate_spec = ai.plan_scene(
             prompt=prompt,
@@ -338,6 +339,8 @@ def generate_with_repair_loop(
             critique=critique,
             attempt=attempt,
         )
+        if isinstance(candidate_spec, dict) and "_error" in candidate_spec:
+            unreachable += 1
         report = validate_scene_spec(candidate_spec, comfort_caps=comfort_caps)
         last_report = report
         attempts_history.append({
@@ -362,11 +365,17 @@ def generate_with_repair_loop(
         critique = report["errors"]
 
     rule_messages = "; ".join(e["message"] for e in (last_report.get("errors") or [])[:3])
-    plain_message = (
-        f"We could not build a valid scene after {max_retries} attempts because some safety or "
-        f"layout constraints were not met ({rule_messages}). Please adjust your description or "
-        f"try generating again."
-    )
+    if unreachable == max_retries:
+        plain_message = (
+            "We could not reach the scene planner just now (it may be busy or over its usage limit). "
+            "Nothing was built. Please wait a minute and try generating again."
+        )
+    else:
+        plain_message = (
+            f"We could not build a valid scene after {max_retries} attempts because some safety or "
+            f"layout constraints were not met ({rule_messages}). Please adjust your description or "
+            f"try generating again."
+        )
     return {
         "success": False,
         "spec": None,

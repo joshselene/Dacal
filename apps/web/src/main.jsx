@@ -767,13 +767,34 @@ function App() {
     }
   }
 
+  // Keep the configure form's task fields in step with the validated spec, so saving never re-imposes
+  // stale defaults (e.g. "milk, bread" / ₹500) onto a scene that stocks different items.
+  function syncConfigurationFromSpec(spec) {
+    const task = spec?.task;
+    if (!task) return;
+    setConfiguration((current) => ({
+      ...current,
+      ...(task.budget != null ? { budget: task.budget } : {}),
+      ...(Array.isArray(task.required) ? { required: task.required.join(", ") } : {}),
+      ...(task.time_limit_s != null ? { time_limit_s: task.time_limit_s } : {}),
+    }));
+  }
+
   async function markReadyToConfigure() {
     if (selectedId && typeof selectedId === "string") {
       try {
         const generated = await classWorkspaceApi.generateExperience(selectedId);
-        if (generated.spec) setSceneSpec(generated.spec);
         if (generated.validation_report) {
           setValidationReport(generated.validation_report);
+        }
+        if (generated.error_plain && generated.status !== "ready_to_configure") {
+          // The repair loop could not produce a safe scene: say so plainly and stay on this screen.
+          setNotice(generated.error_plain);
+          return;
+        }
+        if (generated.spec) {
+          setSceneSpec(generated.spec);
+          syncConfigurationFromSpec(generated.spec);
         }
         const notifData = await classWorkspaceApi.listNotifications().catch(() => null);
         if (notifData) {
@@ -802,7 +823,10 @@ function App() {
           selectedId,
           plainEditInput.trim()
         );
-        if (res.experience?.spec) setSceneSpec(res.experience.spec);
+        if (res.experience?.spec) {
+          setSceneSpec(res.experience.spec);
+          syncConfigurationFromSpec(res.experience.spec);
+        }
         if (res.validation_report) setValidationReport(res.validation_report);
         setLastPatchInfo({
           ratio: (res.patch_ratio * 100).toFixed(1),

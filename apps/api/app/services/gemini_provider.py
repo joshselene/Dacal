@@ -219,8 +219,10 @@ class GeminiAIProvider(AIProvider):
         attempt: int = 1,
     ) -> dict[str, Any]:
         if critique and self._last_spec is not None:
+            # Keep the tutor's request in every repair so a fix never drifts away from what was asked for.
             contents = (
-                f"{REPAIR_INSTRUCTION}\nErrors:\n{json.dumps(critique, indent=1)}\n"
+                f"{REPAIR_INSTRUCTION}\nTutor description (stay faithful to it): {prompt.strip()}\n"
+                f"Errors:\n{json.dumps(critique, indent=1)}\n"
                 f"Current spec:\n{json.dumps(self._last_spec)}"
             )
             kind, temperature = "repair", 0.2
@@ -240,7 +242,8 @@ class GeminiAIProvider(AIProvider):
             # records the failure honestly instead of silently using the mock scene.
             log.error("plan_scene attempt %s failed: %s", attempt, exc)
             spec = {"_error": str(exc)[:200]}
-        self._last_spec = deepcopy(spec) if isinstance(spec, dict) else None
+        # A failed call (quota, network, parse) is not a spec to repair: the next attempt re-plans from scratch.
+        self._last_spec = deepcopy(spec) if isinstance(spec, dict) and "_error" not in spec else None
         return spec
 
     # ------------------------------------------------------------------ FR-08 plain-language edit
