@@ -19,7 +19,7 @@ Read this file first. Each part of the build has a skill under `.agents/skills/`
 | `apps/web/` | React 18 + Vite (JSX), Three.js, axios, lucide; `main.jsx` is about 3,400 lines | Main front end |
 | `apps/web/src/components/FourWallPreview.jsx` | Three.js room in five modes: overview, laptop, room (four walls), 2×2, single wall (`?wall=N`) | Keep |
 | `apps/web/src/style.css` | Apple-style glass tokens | **Redesign to Material 3** |
-| `apps/web/tests/glass-ui.spec.js` | Playwright plus axe accessibility checks at 320, 390, 768 and 1440 px | Keep it passing |
+| `apps/web/tests/ui.spec.js` | Playwright plus axe accessibility checks at 320, 390, 768 and 1440 px | Keep it passing |
 | `src/`, root `package.json` | An older Express/Sequelize prototype | Legacy. Do not extend; delete when convenient |
 | `docker-compose.yml` | Postgres, Redis, MinIO | Local only. The API doesn't use Redis or MinIO |
 | `infra/gcp/`, `firebase.json` | Cloud Run, Cloud SQL and Firebase Hosting scripts | New |

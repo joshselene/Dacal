@@ -3,8 +3,8 @@
   max-width: 1440px;
   margin: 0 auto;
   padding: 32px;
-  color: #20243a;
-  font-family: Inter, system-ui, sans-serif;
+  color: var(--md-sys-color-on-surface);
+  font-family: inherit;
 }
 
 .workspace-header {
@@ -17,7 +17,7 @@
 
 .workspace-eyebrow {
   margin: 0 0 8px;
-  color: #7664d8;
+  color: var(--md-sys-color-primary);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 1.5px;
@@ -31,15 +31,15 @@
 
 .workspace-subtitle {
   margin: 10px 0 0;
-  color: #73778c;
+  color: var(--md-sys-color-on-surface-variant);
 }
 
 .workspace-count,
 .student-count {
   padding: 9px 14px;
   border-radius: 999px;
-  background: #f0edff;
-  color: #6552c8;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
@@ -55,9 +55,9 @@
 .workspace-panel {
   min-width: 0;
   padding: 24px;
-  border: 1px solid #e8e8f1;
+  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 18px;
-  background: #fff;
+  background: var(--md-sys-color-surface-container-low);
   box-shadow: 0 8px 28px rgb(32 36 58 / 4%);
 }
 
@@ -74,7 +74,7 @@
 .workspace-form label {
   display: grid;
   gap: 7px;
-  color: #484d65;
+  color: var(--md-sys-color-on-surface-variant);
   font-size: 13px;
   font-weight: 650;
 }
@@ -87,11 +87,11 @@
   width: 100%;
   min-width: 0;
   padding: 11px 12px;
-  border: 1px solid #dedfeb;
+  border: 1px solid var(--md-sys-color-outline);
   border-radius: 9px;
   outline: none;
-  background: #fff;
-  color: #20243a;
+  background: var(--md-sys-color-surface-container-low);
+  color: var(--md-sys-color-on-surface);
   font: inherit;
   font-size: 14px;
 }
@@ -100,8 +100,8 @@
 .workspace-form textarea:focus,
 .workspace-form select:focus,
 .inline-form input:focus {
-  border-color: #8574e8;
-  box-shadow: 0 0 0 3px rgb(133 116 232 / 12%);
+  border-color: var(--md-sys-color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--md-sys-color-primary) 16%, transparent);
 }
 
 .workspace-form textarea {
@@ -119,18 +119,18 @@
 }
 
 .primary-button {
-  background: #7160d8;
-  color: white;
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
 }
 
 .primary-button:hover {
-  background: #5d4bc5;
+  background: color-mix(in srgb, var(--md-sys-color-primary), var(--md-sys-color-on-primary) 8%);
 }
 
 .secondary-button {
-  border: 1px solid #e1e1ed;
-  background: #fff;
-  color: #4d5067;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface-container-low);
+  color: var(--md-sys-color-on-surface-variant);
 }
 
 .primary-button:disabled {
@@ -157,14 +157,14 @@
 
 .class-card {
   padding: 13px;
-  border: 1px solid #e8e8f1;
+  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 12px;
-  background: #fff;
+  background: var(--md-sys-color-surface-container-low);
 }
 
 .class-card.selected {
-  border-color: #a89cf1;
-  background: #f9f8ff;
+  border-color: var(--md-sys-color-primary);
+  background: var(--md-sys-color-surface-container-high);
 }
 
 .class-card-main {
@@ -185,7 +185,7 @@
 }
 
 .class-card-main span {
-  color: #777b8e;
+  color: var(--md-sys-color-on-surface-variant);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -201,19 +201,19 @@
   padding: 4px 0;
   border: 0;
   background: transparent;
-  color: #6554cb;
+  color: var(--md-sys-color-primary);
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
 }
 
 .danger-text {
-  color: #c34c61;
+  color: var(--md-sys-color-error);
 }
 
 .muted-text,
 .empty-state {
-  color: #85889b;
+  color: var(--md-sys-color-on-surface-variant);
   font-size: 13px;
   line-height: 1.7;
 }
@@ -228,7 +228,7 @@
 
 .details-empty p {
   max-width: 320px;
-  color: #85889b;
+  color: var(--md-sys-color-on-surface-variant);
   font-size: 14px;
   line-height: 1.7;
 }
@@ -240,8 +240,8 @@
   margin-bottom: 15px;
   place-items: center;
   border-radius: 16px;
-  background: #f0edff;
-  color: #7160d8;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-primary);
   font-size: 27px;
 }
 
@@ -255,7 +255,7 @@
   justify-content: space-between;
   gap: 18px;
   padding-bottom: 22px;
-  border-bottom: 1px solid #ededf4;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
 }
 
 .selected-class-header h2 {
@@ -266,14 +266,14 @@
 
 .selected-class-header > div > p:last-child {
   margin: 0;
-  color: #777b8e;
+  color: var(--md-sys-color-on-surface-variant);
   font-size: 13px;
   line-height: 1.6;
 }
 
 .detail-section {
   padding: 24px 0;
-  border-bottom: 1px solid #ededf4;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
 }
 
 .detail-section:last-child {
@@ -310,7 +310,7 @@
   align-items: center;
   gap: 12px;
   padding: 10px 0;
-  border-bottom: 1px solid #f0f0f6;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
 }
 
 .student-avatar {
@@ -320,8 +320,8 @@
   flex: 0 0 34px;
   place-items: center;
   border-radius: 50%;
-  background: #f0edff;
-  color: #6552c8;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
   font-weight: 750;
 }
 
@@ -355,7 +355,7 @@
   align-items: flex-start;
   gap: 16px;
   padding: 15px;
-  border: 1px solid #e8e8f1;
+  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 12px;
 }
 
@@ -363,13 +363,13 @@
   display: grid;
   min-width: 66px;
   gap: 5px;
-  color: #6552c8;
+  color: var(--md-sys-color-on-primary-container);
   font-size: 12px;
 }
 
 .schedule-time span,
 .schedule-info > span {
-  color: #85889b;
+  color: var(--md-sys-color-on-surface-variant);
   font-size: 12px;
 }
 
@@ -387,7 +387,7 @@
 
 .schedule-info p {
   margin: 0;
-  color: #73778c;
+  color: var(--md-sys-color-on-surface-variant);
   font-size: 12px;
   line-height: 1.6;
   white-space: pre-wrap;
@@ -403,10 +403,10 @@
   gap: 12px;
   margin-bottom: 18px;
   padding: 13px 15px;
-  border: 1px solid #f0c9ce;
+  border: 1px solid var(--md-sys-color-error);
   border-radius: 10px;
-  background: #fff5f5;
-  color: #a62d40;
+  background: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-on-error-container);
   font-size: 13px;
   overflow-wrap: anywhere;
 }

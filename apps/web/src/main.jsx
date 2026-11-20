@@ -1097,8 +1097,8 @@ function App() {
           {theme === "light" ? <Moon size={19} /> : <Sun size={19} />}
         </button>
         <header className="login-brand">
-          <div className="sidebar-brand"><div className="brand-logo"><Sparkles size={24} /></div><strong>Chernyx AI Studio</strong></div>
-          <div><p className="eyebrow">YOUR TEACHING WORKSPACE</p><h1>Chernyx AI Studio</h1><p>Describe the room.<br />Teach inside it.</p></div>
+          <div className="sidebar-brand"><div className="brand-logo"><Sparkles size={24} /></div><strong>Chyron</strong></div>
+          <div><p className="eyebrow">YOUR TEACHING WORKSPACE</p><h1>Chyron</h1><p>Describe the room.<br />Teach inside it.</p></div>
           <FourWallPreview spec={DEFAULT_SCENE_SPEC} previewOnly />
           <span className="login-brand-footer">Immersive learning, thoughtfully made.</span>
         </header>
@@ -2519,7 +2519,7 @@ function App() {
       <>
         <section className="dashboard-hero">
           <div className="hero-copy">
-            <span className="eyebrow">CHERNYX AI STUDIO</span>
+            <span className="eyebrow">CHYRON</span>
             <h1>{greeting}.</h1>
             <p>Your activities, classes, and upcoming sessions.</p>
             <button
@@ -3420,8 +3420,8 @@ function App() {
         <div className="sidebar-brand">
           <div className="brand-logo"><Sparkles size={23} /></div>
           <div>
-            <strong>Chernyx</strong>
-            <small>AI Studio</small>
+            <strong>Chyron</strong>
+            <small>Chernyx × DACAL</small>
           </div>
         </div>
 
@@ -3539,8 +3539,8 @@ function App() {
         </main>
 
         <footer className="app-footer">
-          <span>CHERNYX AI STUDIO</span>
-          <span>Design with purpose. Learn with confidence.</span>
+          <span>CHYRON · Chernyx AI Studio × DACAL</span>
+          <span>Built with Gemini and Google Cloud</span>
         </footer>
       </section>
     </div>

@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
-test("glass workspace: authoring, themes, responsive views and scene controls", async ({ page }) => {
+test("workspace: authoring, themes, responsive views and scene controls", async ({ page }) => {
   test.setTimeout(120000);
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
