@@ -300,6 +300,15 @@ export const classWorkspaceApi = {
     return request(`/runs/${runId}`);
   },
 
+  // Gemini Live voice intake: the server mints a single-use ephemeral token; the API key stays on Cloud Run.
+  async getLiveStatus() {
+    return request("/live-token/status");
+  },
+
+  async getLiveToken() {
+    return request("/live-token", { method: "POST" });
+  },
+
   async sendRunCommand(runId, command, payload = {}) {
     return request(`/runs/${runId}/command`, {
       method: "POST",

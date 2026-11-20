@@ -7,6 +7,7 @@ import "./style.css";
 import { guidanceFor, roomSpecFor } from "./components/roomGuidance";
 const FourWallPreview = lazy(() => import("./components/FourWallPreview"));
 const LearnerRoom = lazy(() => import("./components/LearnerRoom"));
+const VoiceIntake = lazy(() => import("./components/VoiceIntake"));
 import { classWorkspaceApi } from "./classWorkspaceApi.js";
 const API_URL = `${import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api/v1"}/auth`;
 
@@ -116,7 +117,7 @@ const QUESTIONS = [
 const NAVIGATION = [
   { name: "Overview", label: "Home", icon: House },
   { name: "Classes & Modules", label: "Classes and modules", icon: LayoutGrid },
-  { name: "Create Experience", label: "Chernyx Studio", icon: Sparkles },
+  { name: "Create Experience", label: "Chyron Studio", icon: Sparkles },
   { name: "My Experiences", label: "Projects", icon: FolderOpen },
   { name: "Session Notebook", label: "Session notebook", icon: BookOpen },
   { name: "Learning Hub", label: "Learning hub", icon: CircleHelp },
@@ -269,7 +270,6 @@ function App() {
   const [stage, setStage] = useState("prompt");
   const [prompt, setPrompt] = useState("");
   const [voiceTranscript, setVoiceTranscript] = useState("");
-  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [mediaAttachments, setMediaAttachments] = useState([]);
   const [experienceTitle, setExperienceTitle] = useState("");
   const [category, setCategory] = useState("Social Skills");
@@ -1103,8 +1103,8 @@ function App() {
           {theme === "light" ? <Moon size={19} /> : <Sun size={19} />}
         </button>
         <header className="login-brand">
-          <div className="sidebar-brand"><div className="brand-logo"><Sparkles size={24} /></div><strong>Chyron</strong></div>
-          <div><p className="eyebrow">YOUR TEACHING WORKSPACE</p><h1>Chyron</h1><p>Describe the room.<br />Teach inside it.</p></div>
+          <div className="sidebar-brand"><div className="brand-logo"><Sparkles size={24} /></div><strong>CHYRON</strong></div>
+          <div><p className="eyebrow">YOUR TEACHING WORKSPACE</p><h1>CHYRON</h1><p>Describe the room.<br />Teach inside it.</p></div>
           <FourWallPreview spec={DEFAULT_SCENE_SPEC} previewOnly />
           <span className="login-brand-footer">Immersive learning, thoughtfully made.</span>
         </header>
@@ -1155,7 +1155,7 @@ function App() {
               </form>
 
               <p className="auth-switch">
-                New to Chernyx?{" "}
+                New to CHYRON?{" "}
                 <button
                   type="button"
                   onClick={() => {
@@ -1349,15 +1349,13 @@ function App() {
     );
   }
 
-  function handleSimulateVoiceClip() {
-    setIsRecordingVoice(true);
-    setTimeout(() => {
-      setIsRecordingVoice(false);
-      const sample =
-        "Create a calm neighbourhood shop with milk and bread on reachable shelves, a 500 rupee budget, and gentle step-by-step prompts.";
-      setVoiceTranscript((prev) => (prev ? `${prev} ${sample}` : sample));
-      setNotice("Voice clip transcribed (FR-03). You can edit the transcript below before continuing.");
-    }, 350);
+  // Gemini Live result: fills the form only. The tutor still reviews it, and the planner + R1-R7 decide.
+  function handleVoiceScenario({ description, comfortProfile, transcript }) {
+    if (description) setPrompt(description);
+    if (transcript) setVoiceTranscript(transcript);
+    const comfort = { low: "Low stimulation", medium: "Balanced", high: "More engaging" }[comfortProfile];
+    if (comfort) setConfiguration((current) => ({ ...current, comfort }));
+    setNotice("Voice scenario ready. Check the description, then continue.");
   }
 
   function handleAttachmentAdd(event) {
@@ -1376,7 +1374,7 @@ function App() {
       <>
         <div className="studio-intro">
           <span className="eyebrow">NEW ACTIVITY</span>
-          <h1>Chernyx Studio</h1>
+          <h1>Chyron Studio</h1>
         </div>
 
         <form className="prompt-panel" onSubmit={continueToQuestions}>
@@ -1401,13 +1399,9 @@ function App() {
             <div className="voice-intake-header">
               <strong>Voice transcript</strong>
               <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={handleSimulateVoiceClip}
-                >
-                  {isRecordingVoice ? "Recording..." : "🎙 Record voice clip"}
-                </button>
+                <Suspense fallback={null}>
+                  <VoiceIntake onSubmit={handleVoiceScenario} onStatus={setNotice} />
+                </Suspense>
                 {voiceTranscript && (
                   <button
                     type="button"
@@ -2676,7 +2670,7 @@ function App() {
     return (
       <>
         <div className="studio-intro">
-          <span className="eyebrow">CHERNYX WORKSPACE</span>
+          <span className="eyebrow">CHYRON WORKSPACE</span>
           <h1>{title}</h1>
           <p>{description}</p>
         </div>
@@ -3426,8 +3420,8 @@ function App() {
         <div className="sidebar-brand">
           <div className="brand-logo"><Sparkles size={23} /></div>
           <div>
-            <strong>Chyron</strong>
-            <small>Chernyx × DACAL</small>
+            <strong>CHYRON</strong>
+            <small>Practice studio</small>
           </div>
         </div>
 
@@ -3545,7 +3539,7 @@ function App() {
         </main>
 
         <footer className="app-footer">
-          <span>CHYRON · Chernyx AI Studio × DACAL</span>
+          <span>CHYRON</span>
           <span>Built with Gemini and Google Cloud</span>
         </footer>
       </section>

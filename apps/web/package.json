@@ -10,6 +10,7 @@
     "tokens": "esbuild scripts/m3-tokens.mjs --bundle --platform=node --format=esm --log-level=warning | node --input-type=module > src/m3-tokens.css"
   },
   "dependencies": {
+    "@google/genai": "^3.6.1",
     "@tanstack/react-query": "^5.0.0",
     "axios": "^1.21.0",
     "lucide-react": "^1.66.0",

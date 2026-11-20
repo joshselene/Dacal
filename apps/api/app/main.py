@@ -11,13 +11,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers.experiences import router as experiences_router
 from app.routers.experience_versions import router as experience_versions_router
 from app.routers.studio_srs import router as studio_srs_router
+from app.routers.live import router as live_router
 from app.modules.classes.interfaces.http.routes import router as classes_router
 
 # Create all tables
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="Chernyx AI Studio API",
+    title="CHYRON API",
     version="0.1.0",
 )
 app.add_middleware(
@@ -58,6 +59,7 @@ app.include_router(
 )
 app.include_router(classes_router, prefix="/api/v1/classes", tags=["Classes"])
 app.include_router(studio_srs_router, prefix="/api/v1")
+app.include_router(live_router, prefix="/api/v1")
 
 
 @app.get("/health")

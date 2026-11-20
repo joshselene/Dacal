@@ -26,7 +26,7 @@ Tutor taps the mic → browser asks /api/live-token → Cloud Run mints an ephem
 import datetime as dt, os
 from google import genai
 
-client = genai.Client(http_options={"api_version": "v1alpha"})
+client = genai.Client(http_options={"api_version": "v1beta"})
 
 @router.post("/live-token")
 def live_token(tutor=Depends(get_current_tutor)):        # existing JWT dependency in app/dependencies.py
@@ -35,7 +35,7 @@ def live_token(tutor=Depends(get_current_tutor)):        # existing JWT dependen
         "uses": 1,
         "expire_time": now + dt.timedelta(minutes=10),
         "new_session_expire_time": now + dt.timedelta(minutes=1),
-        "http_options": {"api_version": "v1alpha"},
+        "http_options": {"api_version": "v1beta"},
     })
     return {"token": tok.name, "model": os.environ["GEMINI_LIVE_MODEL"]}
 ```
@@ -47,7 +47,7 @@ import { GoogleGenAI, Modality, Type } from "@google/genai";
 
 // npm --prefix apps/web i @google/genai   (component: apps/web/src/components/VoiceIntake.jsx)
 const { data: { token, model } } = await axios.post(`${API_BASE}/live-token`, {}, authHeaders());
-const ai = new GoogleGenAI({ apiKey: token, httpOptions: { apiVersion: "v1alpha" } });
+const ai = new GoogleGenAI({ apiKey: token, httpOptions: { apiVersion: "v1beta" } });
 
 const session = await ai.live.connect({
   model,
@@ -70,7 +70,7 @@ const session = await ai.live.connect({
 // Stream 16 kHz mono PCM from an AudioWorklet with session.sendRealtimeInput({ audio: {...} })
 ```
 
-The ephemeral-token API and its field names have changed between SDK versions. Confirm them against the current page at ai.google.dev/gemini-api/docs/live-api/ephemeral-tokens before you build.
+**Implemented** in `apps/api/app/routers/live.py` and `apps/web/src/components/VoiceIntake.jsx`; verified on 2026-11-21 against `gemini-3.8-live` with v1beta tokens (the JS SDK still prints a stale "v1alpha only" warning; ignore it). The ephemeral-token API and its field names have changed between SDK versions. Confirm them against the current page at ai.google.dev/gemini-api/docs/live-api/ephemeral-tokens before you build.
 
 ## INTAKE_PROMPT essentials
 

@@ -454,3 +454,13 @@ input[type="checkbox"],input[type="range"] { accent-color: var(--accent); } labe
 .segmented-buttons button:hover:not([aria-pressed="true"]) { background: color-mix(in srgb, transparent, var(--md-sys-color-on-surface) 8%); }
 .segmented-buttons button[aria-pressed="true"] { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
 .segmented-buttons button[aria-pressed="true"]::before { content: "✓ "; }
+
+/* Feature 5.4: Gemini Live voice intake */
+.voice-live { display: grid; gap: 10px; justify-items: start; }
+.voice-intake-note { color: var(--muted); font-size: 13px; }
+.voice-live-lines { display: grid; gap: 8px; width: 100%; max-height: 220px; overflow: auto; margin: 0; padding: 12px; list-style: none; border-radius: var(--md-sys-shape-corner-medium); background: var(--md-sys-color-surface-container); }
+.voice-line { padding: 8px 12px; border-radius: var(--md-sys-shape-corner-medium); font-size: 14px; line-height: 1.45; }
+.voice-line strong { margin-right: 6px; font-size: 12px; text-transform: uppercase; color: var(--muted); }
+.voice-line-tutor { justify-self: end; background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+.voice-line-gemini { justify-self: start; background: var(--md-sys-color-surface-container-highest); }
+.voice-line-tutor strong { color: inherit; }

@@ -273,7 +273,7 @@ export default function ClassWorkspace() {
     <main className="class-workspace">
       <header className="workspace-header">
         <div>
-          <p className="workspace-eyebrow">CHERNYX AI STUDIO</p>
+          <p className="workspace-eyebrow">CHYRON</p>
           <h1>Class Workspace</h1>
           <p className="workspace-subtitle">
             Organise your classes, students and teaching schedules.

@@ -35,7 +35,7 @@ test("workspace: authoring, themes, responsive views and scene controls", async 
   await page.getByRole("button", { name: "＋ Add Learner", exact: true }).click();
   await expect(page.getByText("Learner 01", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Chernyx Studio", exact: true }).click();
+  await page.getByRole("button", { name: "Chyron Studio", exact: true }).click();
   await page.locator("#experience-prompt").fill("A grocery shop with milk and bread and a budget of 500.");
   await page.locator("#experience-title").fill("Shopping practice");
   await page.getByRole("button", { name: "Continue to questions" }).click();
@@ -70,7 +70,7 @@ test("workspace: authoring, themes, responsive views and scene controls", async 
 
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
-    for (const name of ["Home", "Classes and modules", "Projects", "Session notebook", "Learning hub", "Chernyx Studio"]) {
+    for (const name of ["Home", "Classes and modules", "Projects", "Session notebook", "Learning hub", "Chyron Studio"]) {
       await page.getByRole("navigation").getByRole("button", { name, exact: true }).click();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${name} at ${width}px`).toBe(true);
     }
