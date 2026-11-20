@@ -1,0 +1,90 @@
+{
+  "voice": "en-IN-Chirp3-HD-Sulafat",
+  "language": "en-IN",
+  "speaking_rate": 0.96,
+  "sentence_gap_s": 0.45,
+  "scene_tail_s": 2.4,
+  "note": "Wording follows .agents/rules: practice and support only; no outcome, therapeutic or clinical claims.",
+  "scenes": [
+    {
+      "id": "hook",
+      "visual": "card:hook",
+      "lines": [
+        "Every child deserves to walk into a shop, choose what they need, and pay, on their own.",
+        "For learners with intellectual disabilities, that everyday moment can feel enormous.",
+        "Real shops are loud, fast, and unforgiving. It is hard to practise there."
+      ]
+    },
+    {
+      "id": "tutor",
+      "visual": "card:tutor",
+      "lines": [
+        "Special-education tutors know this.",
+        "They want a calm place to rehearse, again and again, at each learner's own pace.",
+        "Building that place has never been simple. Until now."
+      ]
+    },
+    {
+      "id": "describe",
+      "visual": "app:describe",
+      "lines": [
+        "This is CHYRON.",
+        "A tutor simply describes the lesson in plain words, or by voice.",
+        "A learner buys milk and bread at a kirana shop with two hundred rupees, and pays at the counter."
+      ]
+    },
+    {
+      "id": "concepts",
+      "visual": "app:concepts",
+      "lines": [
+        "Gemini drafts three directions: guided, exploring, and calm.",
+        "Nano Banana sketches each one, so the tutor can choose the feel of the room before anything is built."
+      ]
+    },
+    {
+      "id": "safety",
+      "visual": "app:safety",
+      "lines": [
+        "Then comes the part that matters most.",
+        "Gemini proposes the room, but it does not decide.",
+        "Seven deterministic safety rules check every plan. Can every item be reached? Is it affordable? Are sound and crowds within comfort limits?",
+        "Here, a faulty shop breaks four rules. Gemini repairs it, until every check turns green.",
+        "Gemini proposes. Our rules decide."
+      ]
+    },
+    {
+      "id": "configure",
+      "visual": "app:configure",
+      "lines": [
+        "Tutors stay in control.",
+        "Ask in plain language, make pathway A quieter, and CHYRON applies a tiny, checked change, saved as a new version."
+      ]
+    },
+    {
+      "id": "room",
+      "visual": "app:room",
+      "lines": [
+        "Now the learner steps inside, on a laptop, or across four projected walls.",
+        "In pathway A, the next item glows, arrows show the way, and a calm voice explains each step.",
+        "Pathway C gently fades that help away.",
+        "Same shop. Same task. Only the support changes."
+      ]
+    },
+    {
+      "id": "console",
+      "visual": "app:console",
+      "lines": [
+        "The tutor can switch support live, give a prompt, or pause.",
+        "The session notebook keeps only counts and times. No labels. No scores. No diagnosis."
+      ]
+    },
+    {
+      "id": "close",
+      "visual": "card:close",
+      "lines": [
+        "CHYRON runs entirely on Google: Gemini on Vertex AI, Gemini Live, Nano Banana, Cloud Run, Cloud SQL, and Firebase.",
+        "Built so every school can give every learner a safe place to practise the everyday, and to step into the world, one small task at a time."
+      ]
+    }
+  ]
+}

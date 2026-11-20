@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="base.css">
+<style>
+ .col { position: relative; display: grid; justify-items: center; gap: 30px; text-align: center; }
+ .chips { display: flex; gap: 12px; }
+ .chips .chip { opacity: 0; transform: scale(.8); animation: pop .35s ease forwards; }
+ @keyframes pop { to { opacity: 1; transform: none; } }
+ .tag { font-size: 34px; font-weight: 400; color: var(--muted); max-width: 980px; line-height: 1.35; }
+ .tag b { color: var(--ink); font-weight: 600; }
+ .small { font-size: 20px; letter-spacing: .14em; text-transform: uppercase; color: var(--primary); font-weight: 600; }
+</style></head><body><div class="stage">
+ <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+ <div class="col">
+  <div class="chips" id="chips"></div>
+  <div class="wordmark rise" style="animation-delay:2.5s">CHYRON</div>
+  <div class="tag rise" style="animation-delay:3.4s">Calm 3D practice rooms for <b>special education</b>,<br>made from a tutor's plain words.</div>
+  <div class="small rise" style="animation-delay:4.6s">Built with Gemini and Google Cloud</div>
+ </div></div>
+<script>
+ const host = document.getElementById("chips");
+ ["R1","R2","R3","R4","R5","R6","R7"].forEach((r, i) => {
+   const c = document.createElement("span"); c.className = "chip"; c.textContent = "✕ " + r;
+   c.style.animationDelay = (0.25 + i * 0.16) + "s"; host.appendChild(c);
+   setTimeout(() => { c.classList.add("ok"); c.textContent = "✓ " + r; }, 1400 + i * 120);
+ });
+</script></body></html>

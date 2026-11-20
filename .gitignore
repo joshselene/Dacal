@@ -34,3 +34,6 @@ chyron-buildathon-kit/
 dacal-buildathon-google/
 
 .firebase/
+
+# Rendered demo video (rebuild with tools/demo-video)
+demo_video/
