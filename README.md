@@ -1,4 +1,6 @@
-# Chernyx AI Studio – Phase 1 Monorepo
+# Chyron (Chernyx AI Studio) – Phase 1 Monorepo
+
+> **Branch `buildathon/google`:** Google Startup Buildathon build. AI runs on Gemini (`AI_PROVIDER=gemini`) and the app deploys to Cloud Run, Cloud SQL and Firebase Hosting (`infra/gcp/`). Coding agents (Antigravity, Gemini CLI) should start with `AGENTS.md`. The judging rubric mapping is in `docs/SPARK.md`.
 
 This repository contains the Phase 1 implementation of Chernyx AI Studio.
 

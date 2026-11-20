@@ -1,4 +1,5 @@
 
+import os
 import uuid
 from fastapi import FastAPI, Request
 from app.routers.auth import router as auth_router
@@ -21,10 +22,8 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    # Comma-separated list; on Firebase Hosting the web app calls /api on the same origin.
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -62,8 +61,11 @@ app.include_router(studio_srs_router, prefix="/api/v1")
 
 
 @app.get("/health")
+@app.get("/api/health")  # reachable through the Firebase Hosting /api/** rewrite
 def health_check():
     return {
         "status": "ok",
         "service": "api",
+        "ai_provider": os.getenv("AI_PROVIDER", "mock"),
+        "planner_model": os.getenv("GEMINI_PLANNER_MODEL"),
     }

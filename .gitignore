@@ -22,3 +22,6 @@ build/
 *.db
 test-results/
 playwright-report/
+
+# Gemini demo replay cache
+demo_cache/

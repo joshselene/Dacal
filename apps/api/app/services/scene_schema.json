@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Chyron shop scene spec",
+  "description": "Grid-based practice room. Mirrors the checks in app/services/validator.py (R1-R7). Passed to Gemini as response_json_schema; the validator still runs on every output.",
+  "type": "object",
+  "required": ["room", "layout", "task", "support", "events"],
+  "properties": {
+    "room": {
+      "type": "object",
+      "required": ["w", "h", "entrance"],
+      "properties": {
+        "w": { "type": "integer", "minimum": 6, "maximum": 24, "description": "room width in grid cells (x)" },
+        "h": { "type": "integer", "minimum": 6, "maximum": 24, "description": "room depth in grid cells (y); y = h-1 is the south wall" },
+        "entrance": {
+          "type": "object",
+          "required": ["wall", "cells"],
+          "properties": {
+            "wall": { "type": "string", "enum": ["S"], "description": "entrance is always on the south wall" },
+            "cells": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 3,
+              "description": "[x, y] cells on the south edge, so every y equals room.h - 1",
+              "items": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer" } }
+            }
+          }
+        }
+      }
+    },
+    "layout": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "required": ["id", "asset", "cell", "size"],
+        "properties": {
+          "id": { "type": "string", "description": "unique snake_case id, e.g. shelf1, counter" },
+          "asset": { "type": "string", "enum": ["shelf", "counter", "fridge", "basket_stand", "sign", "plant", "bench", "table", "kiosk", "decor"] },
+          "cell": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer" }, "description": "[x, y] top-left cell" },
+          "size": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer", "minimum": 1, "maximum": 6 }, "description": "[w, h] in cells" },
+          "items": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "required": ["sku", "price"],
+              "properties": {
+                "sku": { "type": "string", "description": "lowercase item name, e.g. milk" },
+                "price": { "type": "integer", "minimum": 1, "maximum": 2000, "description": "price in rupees" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "task": {
+      "type": "object",
+      "required": ["required", "budget", "time_limit_s", "difficulty", "rules", "what_ifs"],
+      "properties": {
+        "required": { "type": "array", "minItems": 1, "maxItems": 5, "items": { "type": "string" }, "description": "skus the learner must buy; each must be on some shelf" },
+        "budget": { "type": "integer", "minimum": 10, "maximum": 5000, "description": "rupees; must cover the cheapest basket" },
+        "time_limit_s": { "type": "integer", "minimum": 60, "maximum": 900 },
+        "difficulty": { "type": "string", "enum": ["Emerging", "Developing", "Secure"] },
+        "rules": { "type": "array", "maxItems": 5, "items": { "type": "string" } },
+        "what_ifs": { "type": "array", "maxItems": 4, "items": { "type": "string" } }
+      }
+    },
+    "support": {
+      "type": "object",
+      "required": ["A", "B", "C"],
+      "description": "A = most prompting and calmest room; C = fewest prompts and busiest room. prompt A>=B>=C, density A<=B<=C, volume A<=B<=C.",
+      "properties": {
+        "A": { "$ref": "#/$defs/pathway" },
+        "B": { "$ref": "#/$defs/pathway" },
+        "C": { "$ref": "#/$defs/pathway" }
+      }
+    },
+    "events": {
+      "type": "array",
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["trigger", "target"],
+        "properties": {
+          "trigger": { "type": "string", "enum": ["enter", "pickup", "checkout", "timer", "what_if", "prompt"] },
+          "target": { "type": "string", "description": "a layout id or the built-in actor 'shopkeeper'" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "pathway": {
+      "type": "object",
+      "required": ["prompt", "density", "volume"],
+      "properties": {
+        "prompt": { "type": "integer", "minimum": 0, "maximum": 3, "description": "how much prompting the learner gets" },
+        "density": { "type": "integer", "minimum": 0, "maximum": 5, "description": "number of background shoppers" },
+        "volume": { "type": "integer", "minimum": 0, "maximum": 80, "description": "ambient volume 0-100" }
+      }
+    }
+  }
+}

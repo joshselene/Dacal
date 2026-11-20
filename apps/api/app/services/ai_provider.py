@@ -288,6 +288,10 @@ class ClaudeAIProvider(MockAIProvider):
 
 def get_ai_provider(mode: str | None = None) -> AIProvider:
     provider_mode = (mode or os.getenv("AI_PROVIDER", "mock")).lower()
+    if provider_mode == "gemini":
+        from .gemini_provider import GeminiAIProvider  # local import avoids a cycle
+
+        return GeminiAIProvider()
     if provider_mode == "claude":
         return ClaudeAIProvider()
     return MockAIProvider()
