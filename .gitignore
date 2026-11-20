@@ -25,3 +25,11 @@ playwright-report/
 
 # Gemini demo replay cache
 demo_cache/
+
+# Archives and temporary bundles
+*.bundle
+*.patch
+*.zip
+chyron-buildathon-kit/
+dacal-buildathon-google/
+

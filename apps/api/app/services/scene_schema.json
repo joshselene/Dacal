@@ -9,19 +9,20 @@
       "type": "object",
       "required": ["w", "h", "entrance"],
       "properties": {
-        "w": { "type": "integer", "minimum": 6, "maximum": 24, "description": "room width in grid cells (x)" },
-        "h": { "type": "integer", "minimum": 6, "maximum": 24, "description": "room depth in grid cells (y); y = h-1 is the south wall" },
+        "w": { "type": "integer", "description": "room width in grid cells (x), between 6 and 24" },
+        "h": { "type": "integer", "description": "room depth in grid cells (y), between 6 and 24; y = h-1 is the south wall" },
         "entrance": {
           "type": "object",
           "required": ["wall", "cells"],
           "properties": {
-            "wall": { "type": "string", "enum": ["S"], "description": "entrance is always on the south wall" },
+            "wall": { "type": "string", "description": "entrance is always on south wall: 'S'" },
             "cells": {
               "type": "array",
-              "minItems": 1,
-              "maxItems": 3,
-              "description": "[x, y] cells on the south edge, so every y equals room.h - 1",
-              "items": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer" } }
+              "description": "[x, y] cells on south edge where each y = room.h - 1",
+              "items": {
+                "type": "array",
+                "items": { "type": "integer" }
+              }
             }
           }
         }
@@ -29,25 +30,32 @@
     },
     "layout": {
       "type": "array",
-      "minItems": 2,
-      "maxItems": 16,
+      "description": "layout objects: shelves, exactly one counter, and decor",
       "items": {
         "type": "object",
         "required": ["id", "asset", "cell", "size"],
         "properties": {
           "id": { "type": "string", "description": "unique snake_case id, e.g. shelf1, counter" },
-          "asset": { "type": "string", "enum": ["shelf", "counter", "fridge", "basket_stand", "sign", "plant", "bench", "table", "kiosk", "decor"] },
-          "cell": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer" }, "description": "[x, y] top-left cell" },
-          "size": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer", "minimum": 1, "maximum": 6 }, "description": "[w, h] in cells" },
+          "asset": { "type": "string", "description": "asset type: shelf, counter, fridge, basket_stand, plant, bench, table" },
+          "cell": {
+            "type": "array",
+            "description": "[x, y] top-left cell coordinates",
+            "items": { "type": "integer" }
+          },
+          "size": {
+            "type": "array",
+            "description": "[w, h] in cells, e.g. [2, 1]",
+            "items": { "type": "integer" }
+          },
           "items": {
             "type": "array",
-            "maxItems": 8,
+            "description": "items with sku and price in rupees",
             "items": {
               "type": "object",
               "required": ["sku", "price"],
               "properties": {
-                "sku": { "type": "string", "description": "lowercase item name, e.g. milk" },
-                "price": { "type": "integer", "minimum": 1, "maximum": 2000, "description": "price in rupees" }
+                "sku": { "type": "string", "description": "item sku, e.g. milk" },
+                "price": { "type": "integer", "description": "price in rupees" }
               }
             }
           }
@@ -58,45 +66,68 @@
       "type": "object",
       "required": ["required", "budget", "time_limit_s", "difficulty", "rules", "what_ifs"],
       "properties": {
-        "required": { "type": "array", "minItems": 1, "maxItems": 5, "items": { "type": "string" }, "description": "skus the learner must buy; each must be on some shelf" },
-        "budget": { "type": "integer", "minimum": 10, "maximum": 5000, "description": "rupees; must cover the cheapest basket" },
-        "time_limit_s": { "type": "integer", "minimum": 60, "maximum": 900 },
-        "difficulty": { "type": "string", "enum": ["Emerging", "Developing", "Secure"] },
-        "rules": { "type": "array", "maxItems": 5, "items": { "type": "string" } },
-        "what_ifs": { "type": "array", "maxItems": 4, "items": { "type": "string" } }
+        "required": {
+          "type": "array",
+          "description": "skus the learner must buy; each must be on some shelf",
+          "items": { "type": "string" }
+        },
+        "budget": { "type": "integer", "description": "budget in rupees covering cheapest required basket" },
+        "time_limit_s": { "type": "integer", "description": "time limit in seconds, e.g. 180" },
+        "difficulty": { "type": "string", "description": "Emerging, Developing, or Secure" },
+        "rules": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "what_ifs": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
       }
     },
     "support": {
       "type": "object",
       "required": ["A", "B", "C"],
-      "description": "A = most prompting and calmest room; C = fewest prompts and busiest room. prompt A>=B>=C, density A<=B<=C, volume A<=B<=C.",
+      "description": "A = calmest (volume<=40, density<=2); B (volume<=60, density<=3); C (volume<=80, density<=5)",
       "properties": {
-        "A": { "$ref": "#/$defs/pathway" },
-        "B": { "$ref": "#/$defs/pathway" },
-        "C": { "$ref": "#/$defs/pathway" }
+        "A": {
+          "type": "object",
+          "required": ["prompt", "density", "volume"],
+          "properties": {
+            "prompt": { "type": "integer", "description": "prompt level 0-3" },
+            "density": { "type": "integer", "description": "density 0-2" },
+            "volume": { "type": "integer", "description": "volume 0-40" }
+          }
+        },
+        "B": {
+          "type": "object",
+          "required": ["prompt", "density", "volume"],
+          "properties": {
+            "prompt": { "type": "integer", "description": "prompt level 0-3" },
+            "density": { "type": "integer", "description": "density 0-3" },
+            "volume": { "type": "integer", "description": "volume 0-60" }
+          }
+        },
+        "C": {
+          "type": "object",
+          "required": ["prompt", "density", "volume"],
+          "properties": {
+            "prompt": { "type": "integer", "description": "prompt level 0-3" },
+            "density": { "type": "integer", "description": "density 0-5" },
+            "volume": { "type": "integer", "description": "volume 0-80" }
+          }
+        }
       }
     },
     "events": {
       "type": "array",
-      "maxItems": 6,
+      "description": "scenario events and triggers",
       "items": {
         "type": "object",
         "required": ["trigger", "target"],
         "properties": {
-          "trigger": { "type": "string", "enum": ["enter", "pickup", "checkout", "timer", "what_if", "prompt"] },
-          "target": { "type": "string", "description": "a layout id or the built-in actor 'shopkeeper'" }
+          "trigger": { "type": "string", "description": "trigger type: enter, pickup, checkout, timer, what_if, prompt" },
+          "target": { "type": "string", "description": "layout object id or 'shopkeeper'" }
         }
-      }
-    }
-  },
-  "$defs": {
-    "pathway": {
-      "type": "object",
-      "required": ["prompt", "density", "volume"],
-      "properties": {
-        "prompt": { "type": "integer", "minimum": 0, "maximum": 3, "description": "how much prompting the learner gets" },
-        "density": { "type": "integer", "minimum": 0, "maximum": 5, "description": "number of background shoppers" },
-        "volume": { "type": "integer", "minimum": 0, "maximum": 80, "description": "ambient volume 0-100" }
       }
     }
   }
